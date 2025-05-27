@@ -12,7 +12,7 @@ class Coupures:
             "Keep Free": {"color": "#0066FF", "dash": None, "label": "Keep Free"},
             "SAVU": {"color": "#FF0000", "dash": "5,8", "label": "SAVU"},
             "Travaux possibles": {"color": "#FFA500", "dash": None, "label": "Travaux possibles"},
-            "Autre": {"color": "#800080", "dash": None, "label": "Autre impact"},
+            "OTHER": {"color": "#800080", "dash": None, "label": "Autre impact"},
         }
 
     def __init__(self):
@@ -46,10 +46,16 @@ class Coupures:
             return 'Autre'
 
     def get_opdf_by_id(self, id):
-        return self.opdf[self.opdf['PTCAR_ID'] == id].iloc[0]
+        result = self.opdf[self.opdf['PTCAR_ID'] == id]
+        if not result.empty:
+            return result.iloc[0]
+        else:
+            return None
     
     def render_op(self, opdf_id):
         op = self.get_opdf_by_id(opdf_id)
+        if op is None:
+            return None
         lat, lon = map(float, op['Geo_Point'].split(","))
         text = f"{op['Abbreviation_BTS_French_complete']} - {op['Classification_FR']}"
         return folium.CircleMarker(
@@ -87,12 +93,18 @@ class Coupures:
             else:
                 op_from = self.get_opdf_by_id(row['section_from_id'])
                 op_to = self.get_opdf_by_id(row['section_to_id'])
+                if op_from is None or op_to is None:
+                    continue
                 lat1, lon1 = map(float, op_from['Geo_Point'].split(","))
                 lat2, lon2 = map(float, op_to['Geo_Point'].split(","))
                 
                 folium.PolyLine([[lat1, lon1], [lat2, lon2]], **line_kw).add_to(CoupureLayer)
-                self.render_op(row['section_from_id']).add_to(CoupureLayer)
-                self.render_op(row['section_to_id']).add_to(CoupureLayer)
+                op_marker_from = self.render_op(row['section_from_id'])
+                op_marker_to = self.render_op(row['section_to_id'])
+                if op_marker_from:
+                    op_marker_from.add_to(CoupureLayer)
+                if op_marker_to:
+                    op_marker_to.add_to(CoupureLayer)
                 
                 folium.Marker(
                     location=[(lat1+lat2)/2, (lon1+lon2)/2],

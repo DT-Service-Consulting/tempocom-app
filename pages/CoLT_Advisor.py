@@ -5,11 +5,15 @@ import folium
 from streamlit_folium import folium_static
 import json
 from components.SecureLogin import SecureLogin
+import streamlit.components.v1 as components
+from components.ResponsiveMap import ResponsiveMap
+from components.LegendColt import LegendColt
 
 
 st.set_page_config(layout="wide", page_title="CoLT Advisor", page_icon="assets/favicon.ico")
-if not SecureLogin().render():
-    st.stop()
+
+#if not SecureLogin().render(): st.stop()
+
 # ------------------------------------------------------------
 #                           CACHING
 # ------------------------------------------------------------
@@ -21,7 +25,8 @@ def load():
 #                           INIT
 # ------------------------------------------------------------
 network, coupures, constants = load()
-m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=1000, height=1000)
+height, width, ratio = ResponsiveMap()
+m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
 status_select = [f"{i} ({constants['colt_status_details'][i]})" for i in constants['colt_status_details'].keys()]
 
 # ------------------------------------------------------------
@@ -128,8 +133,13 @@ if 0 <= st.session_state.current_coupure_index < len(st.session_state.filtered_c
 
     m = network.render_macro_network(m)
     m = coupures.render_coupure(m, current_coupure, network)
+    col1, col2 = st.columns([3,1])
+    with col1:
+        folium_static(m, width=width, height=int(height * ratio))
+    with col2:
+        st.markdown("### Legend")
+        st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
 
-    folium_static(m, width=1000, height=1000)
     df = coupures.coupures[coupures.coupures['cou_id'] == current_coupure]
     if not df.empty:
         st.write(df)

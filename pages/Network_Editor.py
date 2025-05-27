@@ -4,7 +4,7 @@ import folium
 from objects.MacroNetwork import MacroNetwork
 from streamlit_folium import folium_static
 import pandas as pd
-
+from components.ResponsiveMap import ResponsiveMap
 st.set_page_config(layout="wide", page_title="Network Editor", page_icon="assets/favicon.ico")
 # ------------------------------------------------------------
 #                           CACHING
@@ -18,7 +18,8 @@ def load():
 #                           INIT
 # ------------------------------------------------------------
 network = load()
-m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=1000, height=1000)
+height, width, ratio = ResponsiveMap()
+m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
 m = network.render_macro_network(m)
 
 # ------------------------------------------------------------
@@ -68,5 +69,6 @@ with st.form(key='close_connections_form'):
     m = network.close_links(selected_open, m)
 
 folium.LayerControl().add_to(m)
-folium_static(m, width=1000, height=1000)
+
+folium_static(m, width=width, height=int(height * ratio))
 
