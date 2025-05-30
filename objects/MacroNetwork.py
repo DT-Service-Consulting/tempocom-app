@@ -6,10 +6,10 @@ import numpy as np
 from scipy.sparse.csgraph import floyd_warshall
 
 class MacroNetwork:
-    def __init__(self):      
+    def __init__(self,path_to_mart:str='./mart'):      
         # extracting
-        self.links = get_mart('./mart/public/network_graph.csv')
-        self.stations = get_mart('./mart/public/stations.csv')
+        self.links = get_mart(f'{path_to_mart}/public/network_graph.csv')
+        self.stations = get_mart(f'{path_to_mart}/public/stations.csv')
         #self.available_links = self.links[self.links['disabled'] == 0]
         #processing
         self.compute_number_of_links()

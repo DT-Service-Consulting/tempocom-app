@@ -5,14 +5,14 @@ import folium
 from streamlit_folium import folium_static
 import json
 from components.SecureLogin import SecureLogin
-import streamlit.components.v1 as components
 from components.ResponsiveMap import ResponsiveMap
 from components.LegendColt import LegendColt
 
 
 st.set_page_config(layout="wide", page_title="CoLT Advisor", page_icon="assets/favicon.ico")
 
-#if not SecureLogin().render(): st.stop()
+#if not SecureLogin().render(): st.stop() 
+
 
 # ------------------------------------------------------------
 #                           CACHING
@@ -27,6 +27,7 @@ def load():
 network, coupures, constants = load()
 height, width, ratio = ResponsiveMap()
 m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
+
 status_select = [f"{i} ({constants['colt_status_details'][i]})" for i in constants['colt_status_details'].keys()]
 
 # ------------------------------------------------------------
@@ -59,6 +60,8 @@ if 'current_coupure_index' not in st.session_state:
     st.session_state.current_coupure_index = 0
     st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
 
+
+st.markdown("### Browser")
 # Filter form
 with st.form("filter_coupure"):
     col1, col2, col3, col4,col5 = st.columns(5)
@@ -132,10 +135,15 @@ if 0 <= st.session_state.current_coupure_index < len(st.session_state.filtered_c
     st.write(f"Showing coupure {current_coupure} (total: {len(st.session_state.filtered_coupures)})")
 
     m = network.render_macro_network(m)
-    m = coupures.render_coupure(m, current_coupure, network)
+    layer = coupures.render_coupure(current_coupure, network)
+    if layer:
+        layer.add_to(m)
+    else:
+        st.warning("Coupure non trouvée dans les données.")
     col1, col2 = st.columns([3,1])
     with col1:
-        folium_static(m, width=width, height=int(height * ratio))
+        folium.LayerControl().add_to(m)
+        folium_static(m)
     with col2:
         st.markdown("### Legend")
         st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
@@ -147,5 +155,7 @@ if 0 <= st.session_state.current_coupure_index < len(st.session_state.filtered_c
         st.warning("Coupure non trouvée dans les données.")
 else:
     st.error("Invalid coupure index")
+
+
 
 
