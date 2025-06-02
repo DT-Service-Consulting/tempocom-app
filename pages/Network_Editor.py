@@ -5,7 +5,11 @@ from objects.MacroNetwork import MacroNetwork
 from streamlit_folium import folium_static
 import pandas as pd
 from components.ResponsiveMap import ResponsiveMap
+import os
+
 st.set_page_config(layout="wide", page_title="Network Editor", page_icon="assets/favicon.ico")
+
+
 
 # ------------------------------------------------------------
 #                           CACHING

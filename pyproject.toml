@@ -11,6 +11,9 @@ pandas = "^2.2.0"
 numpy = "^1.26.0"
 scipy = "^1.12.0"
 streamlit = "^1.44.1"
+streamlit-folium = "^0.15.0"
+python-dotenv = "^1.0.0"
+pretty-errors = "^1.2.25"
 
 
 [tool.poetry.group.dev.dependencies]

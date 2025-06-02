@@ -7,12 +7,17 @@ import json
 from components.SecureLogin import SecureLogin
 from components.ResponsiveMap import ResponsiveMap
 from components.LegendColt import LegendColt
-
+import os
 
 st.set_page_config(layout="wide", page_title="CoLT Advisor", page_icon="assets/favicon.ico")
 
-#if not SecureLogin().render(): st.stop() 
-
+# ------------------------------------------------------------
+#                           SECURITY
+# ------------------------------------------------------------
+if os.getenv('ENVIRONMENT') == 'production':
+    from components.SecureLogin import SecureLogin
+    if not SecureLogin().render(): 
+        st.stop()
 
 # ------------------------------------------------------------
 #                           CACHING

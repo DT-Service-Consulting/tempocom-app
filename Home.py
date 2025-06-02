@@ -1,4 +1,3 @@
-from streamlit_carousel import carousel
 import pretty_errors
 import streamlit as st
 from components import *
