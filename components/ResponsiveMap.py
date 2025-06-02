@@ -35,6 +35,6 @@ def ResponsiveMap():
 
     width = st.session_state.get("window_width", 1000)
     height = st.session_state.get("window_height", 2000)
-    return width, height, 0.6
+    return width, height, 0.7
 
     # folium_static(map_object, width=width, height=int(height * 0.7)) 
