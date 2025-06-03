@@ -16,7 +16,7 @@ class Coupures:
         }
 
     def __init__(self,path_to_mart:str='./mart'):
-        self.coupures = get_mart(f'{path_to_mart}/private/colts.csv')
+        self.coupures = get_mart(f'{path_to_mart}/private/colt.csv')
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')
 

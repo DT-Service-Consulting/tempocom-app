@@ -15,20 +15,20 @@ labs = [
         "available": True
     },
     {
-        "title": "🖥️Railway Monitor",
-        "description": "Monitor the railway network. See the status of the ETCS, the incidents and many other things.",
-        "image": "assets/simulation_icon.png",
-        "internal": False,
-        "redirect": "pages/Railway_Monitor.py",
+        "title": "🚧CoLT Browser",
+        "description": "Browse the differents coupures for track works.",
+        "image": "assets/maintenance_icon.png",
+        "internal": True,
+        "redirect": "pages/CoLT_Browser.py",
         "available": True
     },
     {
-        "title": "🚧CoLT Advisor",
+        "title": "📈🚉Keep Free Advisor",
         "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
         "image": "assets/maintenance_icon.png",
         "internal": True,
-        "redirect": "pages/CoLT_Advisor.py",
-        "available": True
+        "redirect": "pages/Keep_Free_Advisor.py",
+        "available": False
     },
     {
         "title": "🌊Domino Effect",

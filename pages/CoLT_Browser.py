@@ -8,8 +8,8 @@ from components.SecureLogin import SecureLogin
 from components.ResponsiveMap import ResponsiveMap
 from components.LegendColt import LegendColt
 import os
-
-st.set_page_config(layout="wide", page_title="CoLT Advisor", page_icon="assets/favicon.ico")
+import pandas as pd
+st.set_page_config(layout="wide", page_title="CoLT Browser", page_icon="assets/favicon.ico")
 
 # ------------------------------------------------------------
 #                           SECURITY
@@ -25,11 +25,12 @@ if os.getenv('ENVIRONMENT') == 'production':
 @st.cache_data()
 def load():
     print("Loading data...")
-    return MacroNetwork(), Coupures(), json.load(open("constants.json"))
+    suggestions_df = pd.read_csv('./mart/private/colt_dat_S1_model.csv')
+    return MacroNetwork(), Coupures(), json.load(open("constants.json")), suggestions_df
 # ------------------------------------------------------------
 #                           INIT
 # ------------------------------------------------------------
-network, coupures, constants = load()
+network, coupures, constants, suggestions_df = load()
 height, width, ratio = ResponsiveMap()
 m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
 
@@ -50,7 +51,7 @@ with st.sidebar:
 
 st.markdown(
     '''<h1 style='text-align: center;'>
-            🚧 CoLT Advisor
+            🚧 CoLT Browser
     </h1>''', 
     unsafe_allow_html=True)
 
@@ -160,7 +161,6 @@ if 0 <= st.session_state.current_coupure_index < len(st.session_state.filtered_c
         st.warning("Coupure non trouvée dans les données.")
 else:
     st.error("Invalid coupure index")
-
 
 
 
