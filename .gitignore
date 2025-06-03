@@ -40,3 +40,6 @@ Thumbs.db
 .DS_Store
 **/.DS_Store
 ./brouillon.ipynb
+./sensitive_deployment.sh
+
+sensitive_deployment.sh
