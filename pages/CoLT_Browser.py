@@ -64,13 +64,14 @@ st.markdown(
 # Initialize session state if not exists
 if 'current_coupure_index' not in st.session_state:
     st.session_state.current_coupure_index = 0
+if 'filtered_coupures' not in st.session_state:
     st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
 
 
 st.markdown("### Browser")
 # Filter form
 with st.form("filter_coupure"):
-    col1, col2, col3, col4,col5 = st.columns(5)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         coupure_id = st.text_input("Search coupure by ID 🔢", key="coupure_id")
     with col2:
@@ -81,8 +82,13 @@ with st.form("filter_coupure"):
         period = st.multiselect("Filter by period type ☀️", options=["Day","Night","Continuous"], key="period_type")
     with col5:
         status = st.multiselect("Filter by status ✅", options=status_select, key="status")
-    
-    if st.form_submit_button("Search 🔍"):
+    reset = st.form_submit_button("🔄 Reset Filter")
+    search = st.form_submit_button("Search 🔍")
+    if reset:
+        st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
+        st.session_state.current_coupure_index = 0
+        st.experimental_rerun()
+    if search:
         filtered_df = coupures.coupures
         if impact:
             if 'Autre' in impact:
@@ -99,6 +105,10 @@ with st.form("filter_coupure"):
             filtered_df = filtered_df[filtered_df['period_type'].isin(period)]
         if status:
             filtered_df = filtered_df[filtered_df['status'].isin([i.split(" ")[0] for i in status])]
+        if filtered_df.empty:
+            st.warning("Aucune coupure ne correspond aux critères.")
+            st.session_state.filtered_coupures = []
+            st.stop()
         st.session_state.filtered_coupures = filtered_df['cou_id'].unique().tolist()
         if st.session_state.current_coupure_index >= len(st.session_state.filtered_coupures):
             st.session_state.current_coupure_index = 0
@@ -110,7 +120,6 @@ with st.form("filter_coupure"):
                         idx = st.session_state.filtered_coupures.index(coupure_id)
                         st.session_state.current_coupure_index = idx
                     else:
-                        # Find closest higher coupure ID in filtered list
                         higher_ids = [id for id in st.session_state.filtered_coupures if id > coupure_id]
                         if higher_ids:
                             closest_id = min(higher_ids)
@@ -123,44 +132,50 @@ with st.form("filter_coupure"):
                     st.error("Coupure ID not found")
             except ValueError:
                 st.error("Please enter a valid ID")
+
+filtered_list = st.session_state.get("filtered_coupures", [])
+total_coupures = len(filtered_list)
+if total_coupures == 0:
+    st.warning("Aucune coupure disponible après filtrage.")
+    st.stop()
+st.session_state.current_coupure_index = min(
+    max(st.session_state.current_coupure_index, 0),
+    total_coupures - 1
+)
 col1, col2 = st.columns(2)
-
 with col1:
-    if st.button("⬅ Previous",use_container_width=True):
-        if st.session_state.current_coupure_index > 0:
-            st.session_state.current_coupure_index -= 1
+    if st.button("⬅ Previous", use_container_width=True):
+        st.session_state.current_coupure_index = max(0, st.session_state.current_coupure_index - 1)
 with col2:
-    if st.button("Next ➡",use_container_width=True):
-        if st.session_state.current_coupure_index < len(st.session_state.filtered_coupures) - 1:
-            st.session_state.current_coupure_index += 1
+    if st.button("Next ➡", use_container_width=True):
+        st.session_state.current_coupure_index = min(total_coupures - 1, st.session_state.current_coupure_index + 1)
+current_index = st.session_state.current_coupure_index
+try:
+    current_coupure = filtered_list[current_index]
+except IndexError:
+    st.error("Index hors limites dans la liste filtrée.")
+    st.stop()
+st.write(f"Affichage de la coupure {current_coupure} ({current_index + 1} / {total_coupures})")
 
-
-# Display current coupure
-if 0 <= st.session_state.current_coupure_index < len(st.session_state.filtered_coupures):
-    current_coupure = st.session_state.filtered_coupures[st.session_state.current_coupure_index]
-    st.write(f"Showing coupure {current_coupure} (total: {len(st.session_state.filtered_coupures)})")
-
-    m = network.render_macro_network(m)
-    layer = coupures.render_coupure(current_coupure, network)
-    if layer:
-        layer.add_to(m)
-    else:
-        st.warning("Coupure non trouvée dans les données.")
-    col1, col2 = st.columns([3,1])
-    with col1:
-        folium.LayerControl().add_to(m)
-        folium_static(m)
-    with col2:
-        st.markdown("### Legend")
-        st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
-
-    df = coupures.coupures[coupures.coupures['cou_id'] == current_coupure]
-    if not df.empty:
-        st.write(df)
-    else:
-        st.warning("Coupure non trouvée dans les données.")
+m = network.render_macro_network(m)
+layer = coupures.render_coupure(current_coupure, network)
+if layer:
+    layer.add_to(m)
 else:
-    st.error("Invalid coupure index")
+    st.warning("Coupure non trouvée dans les données.")
+col1, col2 = st.columns([3,1])
+with col1:
+    folium.LayerControl().add_to(m)
+    folium_static(m)
+with col2:
+    st.markdown("### Legend")
+    st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
+
+df = coupures.coupures[coupures.coupures['cou_id'] == current_coupure]
+if not df.empty:
+    st.write(df)
+else:
+    st.warning("Coupure non trouvée dans les données.")
 
 
 
