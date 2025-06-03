@@ -65,7 +65,8 @@ st.markdown(
 if 'current_coupure_index' not in st.session_state:
     st.session_state.current_coupure_index = 0
 if 'filtered_coupures' not in st.session_state:
-    st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
+    initial_coupures = coupures.coupures[coupures.coupures['status'].isin(['Y','B'])]['cou_id'].unique().tolist()
+    st.session_state.filtered_coupures = initial_coupures
 
 
 st.markdown("### Browser")
@@ -81,7 +82,7 @@ with st.form("filter_coupure"):
     with col4:
         period = st.multiselect("Filter by period type ☀️", options=["Day","Night","Continuous"], key="period_type")
     with col5:
-        status = st.multiselect("Filter by status ✅", options=status_select, key="status")
+        status = st.multiselect("Filter by status ✅", options=status_select, key="status", default=['Y','B'])
     reset = st.form_submit_button("🔄 Reset Filter")
     search = st.form_submit_button("Search 🔍")
     if reset:
