@@ -14,7 +14,9 @@ def load():
 #                           INIT
 # ------------------------------------------------------------
 #network = load()
-
+#if 'network' not in st.session_state:
+#    st.session_state.network = load()
+#network = st.session_state.network
 
 # ------------------------------------------------------------
 #                           PATTERN
