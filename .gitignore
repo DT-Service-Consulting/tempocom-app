@@ -43,3 +43,4 @@ Thumbs.db
 ./sensitive_deployment.sh
 
 sensitive_deployment.sh
+env/

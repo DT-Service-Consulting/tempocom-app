@@ -37,9 +37,16 @@ labs = [
         "internal": True,
         "redirect": "pages/Domino_Effect_Analyzer.py",
         "available": False
+    },
+ {
+        "title": "⏱️ Delay Calculator",
+        "description": "Calculate and simulate delays across the railway network based on various input parameters.",
+        "image": "assets/delay_icon.png",
+        "internal": True,
+        "redirect": "pages/Delay_Calculator.py",
+        "available": True
     }
 ]
-
 # ------------------------------------------------------------
 #                           PAGE CONFIGURATION
 # ------------------------------------------------------------
