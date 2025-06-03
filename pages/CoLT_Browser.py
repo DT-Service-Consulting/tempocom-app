@@ -82,7 +82,8 @@ with st.form("filter_coupure"):
     with col4:
         period = st.multiselect("Filter by period type ☀️", options=["Day","Night","Continuous"], key="period_type")
     with col5:
-        status = st.multiselect("Filter by status ✅", options=status_select, key="status", default=['Y','B'])
+        status_default = [s for s in status_select if s.startswith('Y ') or s.startswith('B ')]
+        status = st.multiselect("Filter by status ✅", options=status_select, key="status", default=status_default)
     reset = st.form_submit_button("🔄 Reset Filter")
     search = st.form_submit_button("Search 🔍")
     if reset:
