@@ -65,8 +65,7 @@ st.markdown(
 if 'current_coupure_index' not in st.session_state:
     st.session_state.current_coupure_index = 0
 if 'filtered_coupures' not in st.session_state:
-    initial_coupures = coupures.coupures[coupures.coupures['status'].isin(['Y','B'])]['cou_id'].unique().tolist()
-    st.session_state.filtered_coupures = initial_coupures
+    st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
 
 
 st.markdown("### Browser")
@@ -82,8 +81,7 @@ with st.form("filter_coupure"):
     with col4:
         period = st.multiselect("Filter by period type ☀️", options=["Day","Night","Continuous"], key="period_type")
     with col5:
-        status_default = [s for s in status_select if s.startswith('Y ') or s.startswith('B ')]
-        status = st.multiselect("Filter by status ✅", options=status_select, key="status", default=status_default)
+        status = st.multiselect("Filter by status ✅", options=status_select, key="status")
     reset = st.form_submit_button("🔄 Reset Filter")
     search = st.form_submit_button("Search 🔍")
     if reset:
@@ -140,17 +138,23 @@ total_coupures = len(filtered_list)
 if total_coupures == 0:
     st.warning("Aucune coupure disponible après filtrage.")
     st.stop()
-st.session_state.current_coupure_index = min(
-    max(st.session_state.current_coupure_index, 0),
-    total_coupures - 1
-)
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("⬅ Previous", use_container_width=True):
-        st.session_state.current_coupure_index = max(0, st.session_state.current_coupure_index - 1)
-with col2:
-    if st.button("Next ➡", use_container_width=True):
-        st.session_state.current_coupure_index = min(total_coupures - 1, st.session_state.current_coupure_index + 1)
+# On considère qu'un filtre est appliqué si la liste filtrée est différente de la liste initiale (status Y/B)
+initial_coupures = coupures.coupures[coupures.coupures['status'].isin(['Y','B'])]['cou_id'].unique().tolist()
+filtre_actif = set(filtered_list) != set(initial_coupures)
+if filtre_actif:
+    st.session_state.current_coupure_index = min(
+        max(st.session_state.current_coupure_index, 0),
+        total_coupures - 1
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⬅ Previous", use_container_width=True):
+            st.session_state.current_coupure_index = max(0, st.session_state.current_coupure_index - 1)
+    with col2:
+        if st.button("Next ➡", use_container_width=True):
+            st.session_state.current_coupure_index = min(total_coupures - 1, st.session_state.current_coupure_index + 1)
+else:
+    st.session_state.current_coupure_index = 0
 current_index = st.session_state.current_coupure_index
 try:
     current_coupure = filtered_list[current_index]
