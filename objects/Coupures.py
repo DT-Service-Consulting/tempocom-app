@@ -20,13 +20,19 @@ class Coupures:
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')
 
-        self.leaders = self.coupures['leader'].unique()
         self.coupures['section_from_id'] = pd.to_numeric(self.coupures['section_from_id'], errors='coerce').fillna(-1).astype(int)
         self.coupures['section_to_id'] = pd.to_numeric(self.coupures['section_to_id'], errors='coerce').fillna(-1).astype(int)
         self.coupures['date_begin'] = pd.to_datetime(self.coupures['date_begin'], format='%Y-%m-%d')
         self.coupures['date_end'] = pd.to_datetime(self.coupures['date_end'], format='%Y-%m-%d')
         self.coupures['time_begin'] = pd.to_datetime(self.coupures['time_begin'], format='%H:%M:%S', errors='coerce').dt.time
         self.coupures['time_end'] = pd.to_datetime(self.coupures['time_end'], format='%H:%M:%S', errors='coerce').dt.time
+
+        #filter form
+        self.status = self.coupures['status'].dropna().sort_values().unique()
+        self.period_type = self.coupures['period_type'].dropna().sort_values().unique()
+        self.impact = self.coupures['impact'].dropna().sort_values().unique()
+        self.leaders = self.coupures['leader'].dropna().sort_values().unique()
+
         
         self.coupures['impact'] = self.coupures['impact'].apply(self.categorize_impact)
 
@@ -83,6 +89,7 @@ class Coupures:
             line_kw = dict(color=style["color"], weight=line_weight, opacity=opacity, dash_array=style["dash"])
             
             if self.both_sections_exists_on_macro_network(row, network):
+                print('yes')
                 section_from_Name_FR = network.get_station_by_id(row['section_from_id'])['Name_FR']
                 section_to_Name_FR = network.get_station_by_id(row['section_to_id'])['Name_FR']
                 path, _ = network.get_shortest_path(section_from_Name_FR, section_to_Name_FR)
@@ -114,7 +121,9 @@ class Coupures:
                     icon=folium.DivIcon(html="<span style='color:yellow;font-size:18px;'>⚠</span>"),
                     tooltip="Lien absent du réseau réel"
                 ).add_to(CoupureLayer)
-                
+        print(f"Nombre d'éléments dans la couche: {len(CoupureLayer._children)}")
+        for child_id, child in CoupureLayer._children.items():
+            print(f"Élément {child_id}: {type(child).__name__}")
         return CoupureLayer
     
     def render_contextual_coupures(self, cou_id, network: MacroNetwork):
@@ -161,6 +170,17 @@ class Coupures:
  
         return CoupureLayer
             
+    def get_cou_id_list_by_filter(self, filter):
+        df = self.coupures.copy()
+        
+        for key, value in filter.items():
+            if value:
+                if key == 'cou_id': 
+                    df = df[df[key].astype(str).str.contains(value, case=False, na=False)]
+                else: 
+                    df = df[df[key].isin(value)]
+        
+        return df['cou_id'].unique().tolist()
     
     def both_sections_exists_on_macro_network(self, cou_id, network: MacroNetwork):
         return (cou_id['section_from_id'] in network.stations['PTCAR_ID'].values and 

@@ -1,62 +1,12 @@
 import pretty_errors
 import streamlit as st
 from components import *
+from components.page_template import page_template
+import json
 
-# ------------------------------------------------------------
-#                           LABS
-# ------------------------------------------------------------
-labs = [
-    {
-        "title": "✎ Network Editor",
-        "description": "Modify links between stations and calculate the shortest path between two stations.",
-        "image": "assets/network_icon.png",
-        "internal": False,
-        "redirect": "pages/Network_Editor.py",
-        "available": True
-    },
-    {
-        "title": "🚧CoLT Browser",
-        "description": "Browse the differents coupures for track works.",
-        "image": "assets/maintenance_icon.png",
-        "internal": True,
-        "redirect": "pages/CoLT_Browser.py",
-        "available": True
-    },
-    {
-        "title": "📈🚉Keep Free Advisor",
-        "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
-        "image": "assets/maintenance_icon.png",
-        "internal": True,
-        "redirect": "pages/Keep_Free_Advisor.py",
-        "available": False
-    },
-    {
-        "title": "🌊Domino Effect",
-        "description": "Analyze the domino effect of disruptions on the railway network.",
-        "image": "assets/maintenance_icon.png",
-        "internal": True,
-        "redirect": "pages/Domino_Effect_Analyzer.py",
-        "available": False
-    }
-]
-
-# ------------------------------------------------------------
-#                           PAGE CONFIGURATION
-# ------------------------------------------------------------
-st.set_page_config(layout="wide", page_title="TEMPOCOM - Railway Digital Twin", page_icon="🚄")
-st.logo("assets/logo.png",size="large")
-
-with st.sidebar:
-    st.markdown("Data provided by")
-    st.image("assets/infrabel.png", width=200, clamp=True)
-    st.markdown("Developed by")
-    st.image("assets/brain-logo.png", width=200, clamp=True)
-    
-st.markdown(
-    '''<h1 style='text-align: center;'>
-            🔬All Labs🥼
-    </h1>''', unsafe_allow_html=True)
-
+labs = json.load(open("constants.json"))['labs'] 
+page_template("🔬All Labs🥼")
+  
 for i in range(0, len(labs), 3):
     cols = st.columns(3)
     for col, lab in zip(cols, labs[i:i+3]):

@@ -18,7 +18,7 @@ def labs_card(lab:dict):
             <div>
                 <h3>{lab.get('title','Title')}</h3>
                 <p>{lab.get('description','Description')}</p>
-                <div style='color: {internal_style[lab['internal']]['color']}; font-weight: bold;'>{internal_style[lab['internal']]['text']}</div>
+                <div style='color: {internal_style[lab['private']]['color']}; font-weight: bold;'>{internal_style[lab['private']]['text']}</div>
             </div>
         </div>
         """

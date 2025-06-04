@@ -1,52 +1,26 @@
-#IMPORTS
 import streamlit as st
 import folium
+
 from objects.MacroNetwork import MacroNetwork
 from streamlit_folium import folium_static
 import pandas as pd
-from components.ResponsiveMap import ResponsiveMap
+from components import *
 import os
 
-st.set_page_config(layout="wide", page_title="Network Editor", page_icon="assets/favicon.ico")
+title = "✎ Network Editor"
+page_template(title)
 
-
-
-# ------------------------------------------------------------
-#                           CACHING
-# ------------------------------------------------------------
 @st.cache_data()
-def load():
-    print("Loading data...")
-    return MacroNetwork()
-
-# ------------------------------------------------------------
-#                           INIT
-# ------------------------------------------------------------
-if 'network' not in st.session_state:
-    st.session_state.network = load()
+def load(): return MacroNetwork()
+network = load()
+if 'network' not in st.session_state: st.session_state.network = network
 network = st.session_state.network
 
+
 height, width, ratio = ResponsiveMap()
-m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
+m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter')
 m = network.render_macro_network(m)
 
-# ------------------------------------------------------------
-#                           PATTERN
-# ------------------------------------------------------------
-
-st.logo("assets/logo.png",size="large")
-with st.sidebar:
-    st.markdown("Data provided by")
-    st.image("assets/infrabel.png", width=200, clamp=True)
-    st.markdown("Developed by")
-    st.image("assets/brain-logo.png", width=200, clamp=True)
-
-
-st.markdown(
-    '''<h1 style='text-align: center;'>
-            ✎ Network Editor
-    </h1>''', 
-    unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 #                           RENDER
@@ -54,8 +28,10 @@ st.markdown(
 
 with st.form(key='shortest_path_form'):
     col1, col2 = st.columns(2)
-    with col1: depart = st.selectbox("Departure station :", network.stations['Name_FR'].tolist(), index=None)
-    with col2: arrivee = st.selectbox("Arrival station :", network.stations['Name_FR'].tolist(), index=None)
+    with col1: 
+        depart = st.selectbox("Departure station :", network.stations['Name_FR'].tolist(), index=None)
+    with col2: 
+        arrivee = st.selectbox("Arrival station :", network.stations['Name_FR'].tolist(), index=None)
     submit_button = st.form_submit_button("Find shortest path")
     
     if submit_button:

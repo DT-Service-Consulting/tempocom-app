@@ -10,7 +10,6 @@ class MacroNetwork:
         # extracting
         self.links = get_mart(f'{path_to_mart}/public/network_graph.csv')
         self.stations = get_mart(f'{path_to_mart}/public/stations.csv')
-        self.links['disabled'] = 0
         #self.available_links = self.links[self.links['disabled'] == 0]
         #processing
         self.compute_number_of_links()
@@ -87,34 +86,28 @@ class MacroNetwork:
 
         return m
     
-    def close_links(self, closed_links: list[tuple], m=None):
+    def close_links(self, closed_links: list[tuple], m):
         edited_network = folium.FeatureGroup(name='Closed Links')
 
         #disable both ways
         for link in closed_links:
             mask_way1 = (self.links['Departure_Name_FR'] == link[0]) & (self.links['Arrival_Name_FR'] == link[1])
+            self.links.loc[mask_way1, 'disabled'] = 1
             mask_way2 = (self.links['Departure_Name_FR'] == link[1]) & (self.links['Arrival_Name_FR'] == link[0])
-            self.links.loc[mask_way1 | mask_way2, 'disabled'] = 1
-            # Forcer la mise à jour du DataFrame
-            self.links = self.links.copy()
-        if not m:
-            return
+            self.links.loc[mask_way2, 'disabled'] = 1
+
         #render edited network  
         for _, link in self.links.loc[self.links['disabled'] == 1].iterrows():
             self.render_link(link,color="red").add_to(edited_network)
-        if m:
-            edited_network.add_to(m)
+        edited_network.add_to(m)
+        self.available_links = self.links[self.links['disabled'] == 0]
         return m
             
 
     def get_shortest_path(self, start_station, end_station):
-
-        if start_station == end_station:
-            ptcar_id = self.stations[self.stations['Name_FR'] == start_station]['PTCAR_ID'].iloc[0]
-            return [ptcar_id], 0
-
         available_links = self.links[self.links['disabled'] == 0]
-
+        shortest_path_layer = folium.FeatureGroup(name='Shortest Path')
+       
         n = self.stations.size
         adj_matrix = np.full((n, n), np.inf)
         np.fill_diagonal(adj_matrix, 0)
@@ -187,4 +180,4 @@ class MacroNetwork:
 
         shortest_path_layer.add_to(m)
         return m, total_distance, path
-        
+         

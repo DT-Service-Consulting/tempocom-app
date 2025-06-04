@@ -1,4 +1,39 @@
 {
+    "labs": [
+        {
+            "title": "✎ Network Editor",
+            "description": "Modify links between stations and calculate the shortest path between two stations.",
+            "image": "assets/network_icon.png",
+            "private": false,
+            "redirect": "pages/Network_Editor.py",
+            "available": true
+        },
+        {
+            "title": "🚧 CoLT Browser",
+            "description": "Browse the differents coupures for track works.",
+            "image": "assets/maintenance_icon.png",
+            "private": true,
+            "redirect": "pages/CoLT_Browser.py",
+            "available": true
+        },
+        {
+            "title": "📈🚉Keep Free Advisor",
+            "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
+            "image": "assets/maintenance_icon.png",
+            "private": true,
+            "redirect": "pages/Keep_Free_Advisor.py",
+            "available": false
+        },
+        {
+            "title": "🌊Domino Effect",
+            "description": "Analyze the domino effect of disruptions on the railway network.",
+            "image": "assets/maintenance_icon.png",
+            "private": true,
+            "redirect": "pages/Domino_Effect_Analyzer.py",
+            "available": false
+        }
+    ],
+
     "colt_status_details": {
         "B": "Yes MT",
         "A": "Pending MT",
