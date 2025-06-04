@@ -11,7 +11,7 @@ def page_template(title: str):
         st.image("assets/infrabel.png", width=200, clamp=True)
         st.markdown("Developed by")
         st.image("assets/brain-logo.png", width=200, clamp=True)
-        st.link_button("🌐 DTSC-BRAIN", "https://www.brain.dtsc.be/")
+        st.link_button("🌐 DTSC-BRAIN", "https://brain.dtsc.be/")
         st.link_button("</> Github Repo", "https://github.com/DT-Service-Consulting/tempocom-app")
 
     st.markdown(

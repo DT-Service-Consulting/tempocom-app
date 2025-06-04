@@ -13,7 +13,9 @@ class MacroNetwork:
         #self.available_links = self.links[self.links['disabled'] == 0]
         #processing
         self.compute_number_of_links()
+        self.links['Geo_Shape'] = self.links['Geo_Shape'].apply(lambda x: ast.literal_eval(x))
         self.links['Distance'] = self.links['Distance'].apply(lambda x: round(float(x), 1))
+        self.stations['Geo_Point'] = self.stations['Geo_Point'].apply(lambda x: ast.literal_eval(x))
 
     def get_station_by_id(self, ptcarid):
         return self.stations[self.stations['PTCAR_ID'] == ptcarid].iloc[0]
@@ -35,7 +37,7 @@ class MacroNetwork:
     def render_link(self,link,color="grey"):
         text = f"{link['Departure_Name_FR']} ⇔ {link['Arrival_Name_FR']} ({link['Distance']} km)"
         return folium.PolyLine(
-            locations=[ast.literal_eval(link['Geo_Shape'])],
+            locations=link['Geo_Shape'],
             color=color,
             weight=3,
             popup=text,
@@ -47,7 +49,7 @@ class MacroNetwork:
         # Rayon : 1 si <=2 connexions, sinon 3
         radius = 1 if station['n_links'] <= 2 else 3
         return folium.CircleMarker(
-            location=ast.literal_eval(station['Geo_Point']),
+            location=station['Geo_Point'],
             radius=radius,
             color=color,
             fill=True,
@@ -168,8 +170,8 @@ class MacroNetwork:
             end_station = self.get_station_by_id(path[-1])
             
 
-        start_lat, start_lon = ast.literal_eval(start_station['Geo_Point'])
-        end_lat, end_lon = ast.literal_eval(end_station['Geo_Point'])
+        start_lat, start_lon = start_station['Geo_Point']
+        end_lat, end_lon = end_station['Geo_Point']
         min_lat = min(start_lat, end_lat)
         max_lat = max(start_lat, end_lat) 
         min_lon = min(start_lon, end_lon)

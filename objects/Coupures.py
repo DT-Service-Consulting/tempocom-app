@@ -26,6 +26,7 @@ class Coupures:
         self.coupures['date_end'] = pd.to_datetime(self.coupures['date_end'], format='%Y-%m-%d')
         self.coupures['time_begin'] = pd.to_datetime(self.coupures['time_begin'], format='%H:%M:%S', errors='coerce').dt.time
         self.coupures['time_end'] = pd.to_datetime(self.coupures['time_end'], format='%H:%M:%S', errors='coerce').dt.time
+        self.opdf['Geo_Point'] = self.opdf['Geo_Point'].apply(lambda x: ast.literal_eval(x))
 
         #filter form
         self.status = self.coupures['status'].dropna().sort_values().unique()
@@ -62,7 +63,9 @@ class Coupures:
         op = self.get_opdf_by_id(opdf_id)
         if op is None:
             return None
-        lat, lon = map(float, op['Geo_Point'].split(","))
+        lat, lon = op['Geo_Point']
+        print(lat)
+        print(lon)
         text = f"{op['Abbreviation_BTS_French_complete']}(ID: {op['PTCAR_ID']}) - {op['Classification_FR']}"
         return folium.CircleMarker(
             [lat, lon],
@@ -83,6 +86,7 @@ class Coupures:
             "SAVU": "SAVU"
         }
         for _, row in coupure.iterrows():
+            st
             if pd.isna(row['section_from_id']) or pd.isna(row['section_to_id']):
                 continue
             impact_key = impact_map.get(row['impact'], "OTHER")
@@ -97,7 +101,7 @@ class Coupures:
                 if path is not None:
                     for i in range(len(path) - 1):
                         link = network.get_link_by_ids(path[i], path[i + 1])
-                        folium.PolyLine(ast.literal_eval(link['Geo_Shape']), **line_kw).add_to(CoupureLayer)
+                        folium.PolyLine(link['Geo_Shape'], **line_kw).add_to(CoupureLayer)
             else:
                 op_from = self.get_opdf_by_id(row['section_from_id'])
                 op_to = self.get_opdf_by_id(row['section_to_id'])
