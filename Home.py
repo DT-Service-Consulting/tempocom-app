@@ -23,6 +23,14 @@ labs = [
         "available": True
     },
     {
+        "title": "⏱️ Delay Calculator",
+        "description": "Calculate and simulate delays across the railway network based on various input parameters.",
+        "image": "assets/delay_icon.png",
+        "internal":False,
+        "redirect": "pages/Delay_Calculator.py",
+        "available": True
+    },
+    {
         "title": "📈🚉Keep Free Advisor",
         "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
         "image": "assets/maintenance_icon.png",
@@ -37,15 +45,8 @@ labs = [
         "internal": True,
         "redirect": "pages/Domino_Effect_Analyzer.py",
         "available": False
-    },
- {
-        "title": "⏱️ Delay Calculator",
-        "description": "Calculate and simulate delays across the railway network based on various input parameters.",
-        "image": "assets/delay_icon.png",
-        "internal": True,
-        "redirect": "pages/Delay_Calculator.py",
-        "available": True
     }
+ 
 ]
 # ------------------------------------------------------------
 #                           PAGE CONFIGURATION
