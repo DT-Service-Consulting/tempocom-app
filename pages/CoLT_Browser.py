@@ -91,6 +91,8 @@ else:
 
 folium.LayerControl().add_to(m)
 folium_static(m, width=width, height=int(height * ratio))
+st.markdown("### Legend")
+st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
 
 st.info(f"""
         **Description of the coupure:** 

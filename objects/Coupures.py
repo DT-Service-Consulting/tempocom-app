@@ -77,29 +77,27 @@ class Coupures:
     def render_coupure(self, cou_id, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
         CoupureLayer = folium.FeatureGroup(name=layer_name)
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
-        
+        impact_map = {
+            "CTL": "CTL",
+            "Keep Free": "Keep Free",
+            "SAVU": "SAVU"
+        }
         for _, row in coupure.iterrows():
             if pd.isna(row['section_from_id']) or pd.isna(row['section_to_id']):
-                st.write("One of the sections cannot be rendered")
                 continue
-
-            impact_key = "CTL" if "CTL" in row['impact'] else "Keep Free" if "Keep Free" in row['impact'] else "SAVU" if "SAVU" in row['impact'] else "OTHER"
-
+            impact_key = impact_map.get(row['impact'], "OTHER")
             style = self.PALETTES[impact_key]
             line_kw = dict(color=style["color"], weight=line_weight, opacity=opacity, dash_array=style["dash"])
-            
             if self.both_sections_exists_on_macro_network(row, network):
-                print('yes')
-                section_from_Name_FR = network.get_station_by_id(row['section_from_id'])['Name_FR']
-                section_to_Name_FR = network.get_station_by_id(row['section_to_id'])['Name_FR']
-                path, _ = network.get_shortest_path(section_from_Name_FR, section_to_Name_FR)
-                
+                section_from = network.get_station_by_id(row['section_from_id'])
+                section_to = network.get_station_by_id(row['section_to_id'])
+                if section_from is None or section_to is None:
+                    continue
+                path, _ = network.get_shortest_path(section_from['Name_FR'], section_to['Name_FR'])
                 if path is not None:
                     for i in range(len(path) - 1):
                         link = network.get_link_by_ids(path[i], path[i + 1])
                         folium.PolyLine(ast.literal_eval(link['Geo_Shape']), **line_kw).add_to(CoupureLayer)
-                else:
-                    st.write("No path found between stations")
             else:
                 op_from = self.get_opdf_by_id(row['section_from_id'])
                 op_to = self.get_opdf_by_id(row['section_to_id'])
@@ -107,23 +105,16 @@ class Coupures:
                     continue
                 lat1, lon1 = map(float, op_from['Geo_Point'].split(","))
                 lat2, lon2 = map(float, op_to['Geo_Point'].split(","))
-                
                 folium.PolyLine([[lat1, lon1], [lat2, lon2]], **line_kw).add_to(CoupureLayer)
-                op_marker_from = self.render_op(row['section_from_id'])
-                op_marker_to = self.render_op(row['section_to_id'])
-                if op_marker_from:
-                    op_marker_from.add_to(CoupureLayer)
-                if op_marker_to:
-                    op_marker_to.add_to(CoupureLayer)
-                
+                for op_id in [row['section_from_id'], row['section_to_id']]:
+                    op_marker = self.render_op(op_id)
+                    if op_marker:
+                        op_marker.add_to(CoupureLayer)
                 folium.Marker(
                     location=[(lat1+lat2)/2, (lon1+lon2)/2],
                     icon=folium.DivIcon(html="<span style='color:yellow;font-size:18px;'>⚠</span>"),
                     tooltip="Lien absent du réseau réel"
                 ).add_to(CoupureLayer)
-        print(f"Nombre d'éléments dans la couche: {len(CoupureLayer._children)}")
-        for child_id, child in CoupureLayer._children.items():
-            print(f"Élément {child_id}: {type(child).__name__}")
         return CoupureLayer
     
     def render_contextual_coupures(self, cou_id, network: MacroNetwork):
