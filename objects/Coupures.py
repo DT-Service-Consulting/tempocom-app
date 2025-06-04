@@ -4,6 +4,8 @@ import folium
 from objects.MacroNetwork import MacroNetwork
 import ast
 import streamlit as st
+import logging
+import time
 
 class Coupures:
 
@@ -64,8 +66,6 @@ class Coupures:
         if op is None:
             return None
         lat, lon = op['Geo_Point']
-        print(lat)
-        print(lon)
         text = f"{op['Abbreviation_BTS_French_complete']}(ID: {op['PTCAR_ID']}) - {op['Classification_FR']}"
         return folium.CircleMarker(
             [lat, lon],
@@ -78,49 +78,93 @@ class Coupures:
         )
 
     def render_coupure(self, cou_id, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
+        logger = logging.getLogger(__name__)
+        logging.basicConfig(level=logging.DEBUG)
+        start_time = time.time()
+        logger.debug("▶️ Début render_coupure - cou_id=%s, layer_name=%s", cou_id, layer_name)
+
         CoupureLayer = folium.FeatureGroup(name=layer_name)
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
+
+        logger.debug("Nombre de lignes de coupure filtrées : %d", len(coupure))
+
         impact_map = {
             "CTL": "CTL",
             "Keep Free": "Keep Free",
             "SAVU": "SAVU"
         }
-        for _, row in coupure.iterrows():
-            st
+
+        added_lines = 0
+        added_markers = 0
+
+        for idx, row in coupure.iterrows():
+            logger.debug("Traitement ligne index=%d", idx)
+
             if pd.isna(row['section_from_id']) or pd.isna(row['section_to_id']):
+                logger.debug("⛔ section_from_id ou section_to_id manquant → skip")
                 continue
+
             impact_key = impact_map.get(row['impact'], "OTHER")
-            style = self.PALETTES[impact_key]
+            style = self.PALETTES.get(impact_key, {"color": "gray", "dash": None})
             line_kw = dict(color=style["color"], weight=line_weight, opacity=opacity, dash_array=style["dash"])
+            logger.debug("Impact: %s → style: %s", row['impact'], style)
+
             if self.both_sections_exists_on_macro_network(row, network):
                 section_from = network.get_station_by_id(row['section_from_id'])
                 section_to = network.get_station_by_id(row['section_to_id'])
+
                 if section_from is None or section_to is None:
+                    logger.debug("❗ Station introuvable dans le réseau macro")
                     continue
+
+                logger.debug("↔️ Recherche plus court chemin : %s → %s", section_from['Name_FR'], section_to['Name_FR'])
+
                 path, _ = network.get_shortest_path(section_from['Name_FR'], section_to['Name_FR'])
+
                 if path is not None:
                     for i in range(len(path) - 1):
                         link = network.get_link_by_ids(path[i], path[i + 1])
-                        folium.PolyLine(link['Geo_Shape'], **line_kw).add_to(CoupureLayer)
+                        if link is not None and 'Geo_Shape' in link:
+                            folium.PolyLine(link['Geo_Shape'], **line_kw).add_to(CoupureLayer)
+                            added_lines += 1
+                        else:
+                            logger.debug("❓ Lien absent pour %s → %s", path[i], path[i+1])
             else:
+                logger.debug("⚠️ Sections absentes du réseau macro, fallback sur Geo_Point")
                 op_from = self.get_opdf_by_id(row['section_from_id'])
                 op_to = self.get_opdf_by_id(row['section_to_id'])
+
                 if op_from is None or op_to is None:
+                    logger.debug("❌ op_from ou op_to introuvable")
                     continue
-                lat1, lon1 = map(float, op_from['Geo_Point'].split(","))
-                lat2, lon2 = map(float, op_to['Geo_Point'].split(","))
-                folium.PolyLine([[lat1, lon1], [lat2, lon2]], **line_kw).add_to(CoupureLayer)
-                for op_id in [row['section_from_id'], row['section_to_id']]:
-                    op_marker = self.render_op(op_id)
-                    if op_marker:
-                        op_marker.add_to(CoupureLayer)
-                folium.Marker(
-                    location=[(lat1+lat2)/2, (lon1+lon2)/2],
-                    icon=folium.DivIcon(html="<span style='color:yellow;font-size:18px;'>⚠</span>"),
-                    tooltip="Lien absent du réseau réel"
-                ).add_to(CoupureLayer)
+
+                try:
+                    lat1, lon1 = op_from['Geo_Point']
+                    lat2, lon2 = op_to['Geo_Point']
+                    folium.PolyLine([[lat1, lon1], [lat2, lon2]], **line_kw).add_to(CoupureLayer)
+                    added_lines += 1
+
+                    for op_id in [row['section_from_id'], row['section_to_id']]:
+                        op_marker = self.render_op(op_id)
+                        if op_marker:
+                            op_marker.add_to(CoupureLayer)
+                            added_markers += 1
+
+                    folium.Marker(
+                        location=[(lat1 + lat2) / 2, (lon1 + lon2) / 2],
+                        icon=folium.DivIcon(html="<span style='color:yellow;font-size:18px;'>[!]</span>"),
+                        tooltip="Lien absent du réseau réel"
+                    ).add_to(CoupureLayer)
+                    added_markers += 1
+
+                except Exception as e:
+                    logger.exception("💥 Erreur lors du parsing Geo_Point : %s", e)
+                    continue
+
+            elapsed = time.time() - start_time
+            logger.debug("✅ Fin render_coupure — lignes ajoutées: %d, marqueurs: %d, durée: %.2fs", added_lines, added_markers, elapsed)
         return CoupureLayer
-    
+        
     def render_contextual_coupures(self, cou_id, network: MacroNetwork):
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
         coupure = coupure[coupure['status'] == 'Y'].drop_duplicates('cou_id')
@@ -133,7 +177,7 @@ class Coupures:
         
         date_overlapping = self.coupures[
             ((self.coupures['date_begin'] <= current_date_end) & 
-             (self.coupures['date_end'] >= current_date_begin)) &
+            (self.coupures['date_end'] >= current_date_begin)) &
             (self.coupures['cou_id'] != cou_id)
         ].drop_duplicates('cou_id')
         
@@ -147,7 +191,7 @@ class Coupures:
             
         time_overlapping = date_overlapping[
             ((date_overlapping['time_begin'].fillna('00:00:00').apply(lambda x: pd.to_datetime(str(x)).time()) <= current_time_end) &
-             (date_overlapping['time_end'].fillna('00:00:00').apply(lambda x: pd.to_datetime(str(x)).time()) >= current_time_begin))
+            (date_overlapping['time_end'].fillna('00:00:00').apply(lambda x: pd.to_datetime(str(x)).time()) >= current_time_begin))
         ]
         
         if time_overlapping.empty:
@@ -162,7 +206,7 @@ class Coupures:
                 else:
                     for child in layer._children.values():
                         child.add_to(CoupureLayer)
- 
+
         return CoupureLayer
             
     def get_cou_id_list_by_filter(self, filter):
