@@ -41,6 +41,7 @@ height, width, ratio = ResponsiveMap()
 #                           RENDER
 # ------------------------------------------------------------
 
+
 # Filter form
 with st.form("filter_coupure"):
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -53,7 +54,9 @@ with st.form("filter_coupure"):
     with col4:
         period = st.multiselect("Filter by period type ☀️", options=coupures.period_type, key="period_type")
     with col5:
+
         status = st.multiselect("Filter by status ✅", options=coupures.status, key="status")
+
     search = st.form_submit_button("Search 🔍")
 
     if search:
@@ -77,6 +80,7 @@ with col2:
         st.session_state.current_coupure = min(max(filtered_cou_ids), filtered_cou_ids[filtered_cou_ids.index(current_coupure) + 1])
 st.write(f"Displaying the coupure {current_coupure}")
 
+
 m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter')
 m = network.render_macro_network(m)
 layer = coupures.render_coupure(current_coupure, network)
@@ -95,6 +99,5 @@ st.info(f"""
 df = coupures.coupures[coupures.coupures['cou_id'] == current_coupure]
 if not df.empty:st.write(df)
 else: st.warning("Coupure not found in the data.")
-
 
 
