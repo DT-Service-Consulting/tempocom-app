@@ -1,85 +1,53 @@
-#IMPORTS
 import streamlit as st
-import folium
-from objects.MacroNetwork import MacroNetwork
-from streamlit_folium import folium_static
-import pandas as pd
-from components.ResponsiveMap import ResponsiveMap
-import os
+from streamlit_folium import st_folium
+from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2
 
-st.set_page_config(layout="wide", page_title="Dealy Calculation", page_icon="assets/favicon.ico")
+st.set_page_config(layout="centered")
+st.title("⏱️ Delay Bubble Map")
 
+@st.cache_resource
+def load_map():
+    return DelayBubbleMap(
+        stations_path="./mart/public/stations.csv",
+        delay_data_path="./mart/public/delays_standardized_titlecase.csv"
+    )
 
+@st.cache_resource
+def load_map1():
+    return DelayBubbleMap2(
+        stations_path="./mart/public/stations.csv",
+        delay_data_path="./mart/public/delays_standardized_titlecase.csv"
+    )
 
-# ------------------------------------------------------------
-#                           CACHING
-# ------------------------------------------------------------
-@st.cache_data()
-def load():
-    print("Loading data...")
-    return MacroNetwork()
+# Load maps
+bubble_map = load_map()
+bubble_map.prepare_data()
+stations_arrival = bubble_map.delay_summary['Stopping place (FR)'].tolist()
 
-# ------------------------------------------------------------
-#                           INIT
-# ------------------------------------------------------------
-if 'network' not in st.session_state:
-    st.session_state.network = load()
-network = st.session_state.network
+bubble_map1 = load_map1()
+bubble_map1.prepare_data1()
+stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
 
-height, width, ratio = ResponsiveMap()
-m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
-m = network.render_macro_network(m)
+# Combine and deduplicate station names
+all_top_stations = sorted(set(stations_arrival + stations_departure))
 
-# ------------------------------------------------------------
-#                           PATTERN
-# ------------------------------------------------------------
+# UI: Multi-select filter
+selected_stations = st.multiselect(
+    "Filter stations shown on the map:",
+    options=all_top_stations,
+    default=all_top_stations
+)
 
-st.logo("assets/logo.png",size="large")
-with st.sidebar:
-    st.markdown("Data provided by")
-    st.image("assets/infrabel.png", width=200, clamp=True)
-    st.markdown("Developed by")
-    st.image("assets/brain-logo.png", width=200, clamp=True)
+# Render filtered maps
+st.subheader("Top 10 stations with delays at departure")
+bubble_map1.prepare_data1(station_filter=selected_stations)
+m2 = bubble_map1.render_map1()
+st_folium(m2, width=700, height=400)
 
+st.subheader("Top 10 stations with delays at arrival")
+bubble_map.prepare_data(station_filter=selected_stations)
+m1 = bubble_map.render_map()
+st_folium(m1, width=700, height=400)
 
-st.markdown(
-    '''<h1 style='text-align: center;'>
-            ✎ Network Editor
-    </h1>''', 
-    unsafe_allow_html=True)
-
-# ------------------------------------------------------------
-#                           RENDER
-# ------------------------------------------------------------
-
-with st.form(key='shortest_path_form'):
-    col1, col2 = st.columns(2)
-    with col1: depart = st.selectbox("Departure station :", network.stations['Name_FR'].tolist(), index=None)
-    with col2: arrivee = st.selectbox("Arrival station :", network.stations['Name_FR'].tolist(), index=None)
-    submit_button = st.form_submit_button("Find shortest path")
-    
-    if submit_button:
-        st.info('The shortest path is found with the Floyd-Warshall algorithm, finding the shortest path between any two stations.')
-        print("streamlit render_shortest_path")
-        print(network.links[network.links['disabled'] == 1])
-        m, total_distance, path = network.render_shortest_path(depart, arrivee, m)
-        if path:
-            st.success(f"The shortest path is found with a distance of {round(total_distance,2)} km.")
-        else:
-            st.error("No path found between the selected stations.")
-
-st.subheader("Close connections")
-
-with st.form(key='close_connections_form'):
-    selected_open = st.multiselect("Select which links to close:", network.get_open_links(), help="Select the connections you want to close. The connections will be closed by cutting the line between the two stations and the Shortest Path will be calculated depending on the new network.")
-    submit_button = st.form_submit_button("Close selected links")
-    selected_open = [tuple(link.split(" ⇔ ")) for link in selected_open]
-   
-    m = network.close_links(selected_open, m)
-    print("streamlit close_links")
-    print(network.links[network.links['disabled'] == 1])
-
-folium.LayerControl().add_to(m)
-
-folium_static(m, width=width, height=int(height * ratio))
+st.markdown("<div style='margin-top: -50px;'></div>", unsafe_allow_html=True)
 
