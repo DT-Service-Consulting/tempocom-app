@@ -14,6 +14,7 @@ streamlit = "1.44.1"
 streamlit-folium = "^0.15.0"
 python-dotenv = "^1.0.0"
 pretty-errors = "^1.2.25"
+pydeck = "^0.9.1"
 
 
 [tool.poetry.group.dev.dependencies]

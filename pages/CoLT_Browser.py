@@ -9,175 +9,92 @@ from components.ResponsiveMap import ResponsiveMap
 from components.LegendColt import LegendColt
 import os
 import pandas as pd
-st.set_page_config(layout="wide", page_title="CoLT Browser", page_icon="assets/favicon.ico")
+from components.page_template import page_template
 
-# ------------------------------------------------------------
-#                           SECURITY
-# ------------------------------------------------------------
-if os.getenv('ENVIRONMENT') == 'production':
-    from components.SecureLogin import SecureLogin
-    if not SecureLogin().render(): 
-        st.stop()
+title = "🚧 CoLT Browser"
+page_template(title)
 
-# ------------------------------------------------------------
-#                           CACHING
-# ------------------------------------------------------------
 @st.cache_data()
-def load():
-    print("Loading data...")
-    suggestions_df = pd.read_csv('./mart/private/colt_dat_S1_model.csv')
-    return MacroNetwork(), Coupures(), json.load(open("constants.json")), suggestions_df
-# ------------------------------------------------------------
-#                           INIT
-# ------------------------------------------------------------
-network, coupures, constants, suggestions_df = load()
+def load(): return MacroNetwork(), Coupures(), json.load(open("constants.json"))
+network, coupures, constants = load()
+if 'network' not in st.session_state: st.session_state.network = network
+if 'coupures' not in st.session_state: st.session_state.coupures = coupures
+if 'constants' not in st.session_state: st.session_state.constants = constants
+if 'filtered_cou_ids' not in st.session_state: st.session_state.filtered_cou_ids = coupures.coupures['cou_id'].unique().tolist()
+if 'current_coupure' not in st.session_state: st.session_state.current_coupure = coupures.coupures['cou_id'].unique().tolist()[0]
+if 'm' not in st.session_state:
+    m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter')
+    m = network.render_macro_network(m)
+    st.session_state.m = m
+network = st.session_state.network
+coupures = st.session_state.coupures
+constants = st.session_state.constants
+filtered_cou_ids = st.session_state.filtered_cou_ids
+current_coupure = st.session_state.current_coupure
+m = st.session_state.m
+
 height, width, ratio = ResponsiveMap()
-m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter', width=width, height=height)
 
-status_select = [f"{i} ({constants['colt_status_details'][i]})" for i in constants['colt_status_details'].keys()]
-
-# ------------------------------------------------------------
-#                           PATTERN
-# ------------------------------------------------------------
-
-st.logo("assets/logo.png",size="large")
-with st.sidebar:
-    st.markdown("Data provided by")
-    st.image("assets/infrabel.png", width=200, clamp=True)
-    st.markdown("Developed by")
-    st.image("assets/brain-logo.png", width=200, clamp=True)
-
-
-
-st.markdown(
-    '''<h1 style='text-align: center;'>
-            🚧 CoLT Browser
-    </h1>''', 
-    unsafe_allow_html=True)
+    
 
 # ------------------------------------------------------------
 #                           RENDER
 # ------------------------------------------------------------
 
-
-
-# Initialize session state if not exists
-if 'current_coupure_index' not in st.session_state:
-    st.session_state.current_coupure_index = 0
-if 'filtered_coupures' not in st.session_state:
-    initial_coupures = coupures.coupures[coupures.coupures['status'].isin(['Y','B'])]['cou_id'].unique().tolist()
-    st.session_state.filtered_coupures = initial_coupures
-
-
-st.markdown("### Browser")
 # Filter form
 with st.form("filter_coupure"):
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         coupure_id = st.text_input("Search coupure by ID 🔢", key="coupure_id")
     with col2:
-        impact = st.multiselect("Filter by impact 🚫", options=['Keep Free', 'CTL', 'SAVU', 'Travaux possibles', 'Autre'], key="impact")
+        st.markdown("<div style='text-align: center;'>OR</div>", unsafe_allow_html=True)
     with col3:
-        leader = st.multiselect("Filter by leader 👷‍♂️", options=coupures.coupures['leader'].dropna().sort_values().unique(), key="leader")
+        leader = st.multiselect("Filter by leader 👷‍♂️", options=coupures.leaders, key="leader")
     with col4:
-        period = st.multiselect("Filter by period type ☀️", options=["Day","Night","Continuous"], key="period_type")
+        period = st.multiselect("Filter by period type ☀️", options=coupures.period_type, key="period_type")
     with col5:
-        status_default = [s for s in status_select if s.startswith('Y ') or s.startswith('B ')]
-        status = st.multiselect("Filter by status ✅", options=status_select, key="status", default=status_default)
-    reset = st.form_submit_button("🔄 Reset Filter")
+        status = st.multiselect("Filter by status ✅", options=coupures.status, key="status")
     search = st.form_submit_button("Search 🔍")
-    if reset:
-        st.session_state.filtered_coupures = coupures.coupures['cou_id'].unique().tolist()
-        st.session_state.current_coupure_index = 0
-        st.experimental_rerun()
-    if search:
-        filtered_df = coupures.coupures
-        if impact:
-            if 'Autre' in impact:
-                specific_impacts = [i for i in impact if i != 'Autre']
-                filtered_df = filtered_df[
-                    (filtered_df['impact'].apply(lambda x: all(i in str(x) for i in specific_impacts))) |
-                    (~filtered_df['impact'].apply(lambda x: all(i in str(x) for i in ['Keep Free', 'CTL', 'SAVU', 'Travaux possibles'])))
-                ]
-            else:
-                filtered_df = filtered_df[filtered_df['impact'].apply(lambda x: all(i in str(x) for i in impact))]
-        if leader:
-            filtered_df = filtered_df[filtered_df['leader'].isin(leader)]
-        if period:
-            filtered_df = filtered_df[filtered_df['period_type'].isin(period)]
-        if status:
-            filtered_df = filtered_df[filtered_df['status'].isin([i.split(" ")[0] for i in status])]
-        if filtered_df.empty:
-            st.warning("Aucune coupure ne correspond aux critères.")
-            st.session_state.filtered_coupures = []
-            st.stop()
-        st.session_state.filtered_coupures = filtered_df['cou_id'].unique().tolist()
-        if st.session_state.current_coupure_index >= len(st.session_state.filtered_coupures):
-            st.session_state.current_coupure_index = 0
-        if coupure_id:
-            try:
-                coupure_id = int(coupure_id)
-                if coupure_id in coupures.coupures['cou_id'].values:
-                    if coupure_id in st.session_state.filtered_coupures:
-                        idx = st.session_state.filtered_coupures.index(coupure_id)
-                        st.session_state.current_coupure_index = idx
-                    else:
-                        higher_ids = [id for id in st.session_state.filtered_coupures if id > coupure_id]
-                        if higher_ids:
-                            closest_id = min(higher_ids)
-                            idx = st.session_state.filtered_coupures.index(closest_id)
-                            st.session_state.current_coupure_index = idx
-                            st.warning(f"Showing closest available coupure: {closest_id}")
-                        else:
-                            st.error("No matching coupures found after filtering")
-                else:
-                    st.error("Coupure ID not found")
-            except ValueError:
-                st.error("Please enter a valid ID")
 
-filtered_list = st.session_state.get("filtered_coupures", [])
-total_coupures = len(filtered_list)
-if total_coupures == 0:
-    st.warning("Aucune coupure disponible après filtrage.")
-    st.stop()
-st.session_state.current_coupure_index = min(
-    max(st.session_state.current_coupure_index, 0),
-    total_coupures - 1
-)
+    if search:
+        filter = {
+            'cou_id': coupure_id,
+            'leader': leader,
+            'period_type': period,
+            'status': status
+        }
+        filtered_cou_ids = coupures.get_cou_id_list_by_filter(filter)
+        current_coupure = filtered_cou_ids[0]
+        st.session_state.filtered_cou_ids = filtered_cou_ids
+        st.session_state.current_coupure = current_coupure
+
 col1, col2 = st.columns(2)
 with col1:
     if st.button("⬅ Previous", use_container_width=True):
-        st.session_state.current_coupure_index = max(0, st.session_state.current_coupure_index - 1)
+        st.session_state.current_coupure = max(min(filtered_cou_ids), filtered_cou_ids[filtered_cou_ids.index(current_coupure) - 1])
 with col2:
     if st.button("Next ➡", use_container_width=True):
-        st.session_state.current_coupure_index = min(total_coupures - 1, st.session_state.current_coupure_index + 1)
-current_index = st.session_state.current_coupure_index
-try:
-    current_coupure = filtered_list[current_index]
-except IndexError:
-    st.error("Index hors limites dans la liste filtrée.")
-    st.stop()
-st.write(f"Affichage de la coupure {current_coupure} ({current_index + 1} / {total_coupures})")
+        st.session_state.current_coupure = min(max(filtered_cou_ids), filtered_cou_ids[filtered_cou_ids.index(current_coupure) + 1])
+st.write(f"Displaying the coupure {current_coupure}")
 
+m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter')
 m = network.render_macro_network(m)
 layer = coupures.render_coupure(current_coupure, network)
 if layer:
     layer.add_to(m)
 else:
-    st.warning("Coupure non trouvée dans les données.")
-col1, col2 = st.columns([3,1])
-with col1:
-    folium.LayerControl().add_to(m)
-    folium_static(m)
-with col2:
-    st.markdown("### Legend")
-    st.markdown(LegendColt(coupures.PALETTES), unsafe_allow_html=True)
+    st.warning("Coupure not found in the data.")
 
+folium.LayerControl().add_to(m)
+folium_static(m, width=width, height=int(height * ratio))
+
+st.info(f"""
+        **Description of the coupure:** 
+        {coupures.descriptions[coupures.descriptions['cou_id'] == current_coupure]['description_of_works'].values[0]}
+        """)
 df = coupures.coupures[coupures.coupures['cou_id'] == current_coupure]
-if not df.empty:
-    st.write(df)
-else:
-    st.warning("Coupure non trouvée dans les données.")
+if not df.empty:st.write(df)
+else: st.warning("Coupure not found in the data.")
 
 
 

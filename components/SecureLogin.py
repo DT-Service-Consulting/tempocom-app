@@ -6,10 +6,13 @@ import json
 import os
 from dotenv import load_dotenv
 
-load_dotenv('.app.env')
+
+
 
 class SecureLogin:
-    def __init__(self, use_2fa=False): 
+    def __init__(self, use_2fa=False):
+        self.environment = os.getenv('ENVIRONMENT')
+        load_dotenv('.app.env')
         self.PASSWORD = os.environ.get("APP_PASSWORD")
         self.use_2fa = use_2fa
         if "step" not in st.session_state:
@@ -34,7 +37,17 @@ class SecureLogin:
             st.error(f"Error sending email: {str(e)}")
             st.info("For demo purposes, here is your OTP code: " + otp_code)
 
-    def render(self):
+    def render(self, title: str):
+        labs = json.load(open("constants.json"))['labs']
+        current_lab = next((lab for lab in labs if lab["title"] == title), None)
+        if not current_lab['private']:
+            return True
+        elif self.environment == 'dev':
+            return True
+        
+        if st.session_state.step == "logged_in":
+            return True
+        
         if st.session_state.step == "login":
             st.title("Secure Login")
             if self.use_2fa:
@@ -55,9 +68,11 @@ class SecureLogin:
                     self.send_otp_email(email, otp)
                     st.success(f"Code sent to {email}")
                     st.session_state.step = "verify"
+                    st.rerun()
                 else:
                     st.success("Login successful ✅")
                     st.session_state.step = "logged_in"
+                    st.rerun()
 
         if st.session_state.step == "verify":
             st.title("2FA Verification")
@@ -68,5 +83,6 @@ class SecureLogin:
                     return False
                 st.success("Login successful ✅")
                 st.session_state.step = "logged_in"
+                st.rerun()
 
-        return st.session_state.step == "logged_in"
+        return False
