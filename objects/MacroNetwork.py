@@ -72,9 +72,15 @@ class MacroNetwork:
     def render_macro_network(self,m):
         links_layer = folium.FeatureGroup(name='Links')
         stations_layer = folium.FeatureGroup(name='Stations')
+        done_links = []
 
         #render links
         for _, link in self.links.iterrows():
+            link_key = tuple(sorted([link['Departure_Name_FR'], link['Arrival_Name_FR']]))
+            if link_key in done_links:
+                continue
+            done_links.append(link_key)
+
             self.render_link(link).add_to(links_layer)
 
         #render stations
