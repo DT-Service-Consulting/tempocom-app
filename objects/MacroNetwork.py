@@ -86,7 +86,7 @@ class MacroNetwork:
 
         return m
     
-    def close_links(self, closed_links: list[tuple], m):
+    def close_links(self, closed_links: list[tuple], m=None):
         edited_network = folium.FeatureGroup(name='Closed Links')
 
         #disable both ways
@@ -95,7 +95,8 @@ class MacroNetwork:
             self.links.loc[mask_way1, 'disabled'] = 1
             mask_way2 = (self.links['Departure_Name_FR'] == link[1]) & (self.links['Arrival_Name_FR'] == link[0])
             self.links.loc[mask_way2, 'disabled'] = 1
-
+        if not m:
+            return
         #render edited network  
         for _, link in self.links.loc[self.links['disabled'] == 1].iterrows():
             self.render_link(link,color="red").add_to(edited_network)
@@ -107,6 +108,9 @@ class MacroNetwork:
     def get_shortest_path(self, start_station, end_station):
         available_links = self.links[self.links['disabled'] == 0]
         shortest_path_layer = folium.FeatureGroup(name='Shortest Path')
+
+        if start_station == end_station:
+            return [start_station], 0
        
         n = self.stations.size
         adj_matrix = np.full((n, n), np.inf)
