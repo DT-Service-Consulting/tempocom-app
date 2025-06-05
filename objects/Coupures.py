@@ -225,6 +225,16 @@ class Coupures:
         unique_coupure_types = self.coupures.groupby(selected_columns).size().reset_index(name='count')
         return unique_coupure_types
     
+    def get_kf_pred(self, nb_occ):
+        if nb_occ >= 10:
+            return "💎"
+        elif nb_occ >= 5:
+            return "🥇"
+        elif nb_occ >= 3:
+            return "🥈"
+        else:
+            return "🥉"
+    
     def advise_keepfrees(self, ctl_section, network: MacroNetwork):
         section_from_name, section_to_name = ctl_section.split(" <=> ")
         section_from_id = self.opdf[self.opdf['Abbreviation_BTS_French_complete'] == section_from_name]['PTCAR_ID'].iloc[0]
@@ -246,12 +256,14 @@ class Coupures:
         }
         advised_coupures.append(advised_ctl)
         for _, row in keep_free.iterrows():
+            if row['nb_occ'] < 2:
+                continue
             advised_coupure = {
                 'cou_id': f"advised_{row['kf_from']}_{row['kf_to']}",
                 'section_from_id': row['kf_from'],
                 'section_to_id': row['kf_to'],
                 'impact': 'Keep Free',
-                'nb_occ': row['nb_occ'],
+                'nb_occ': self.get_kf_pred(row['nb_occ']),
                 'section_from_name': self.opdf[self.opdf['PTCAR_ID'] == row['kf_from']]['Abbreviation_BTS_French_complete'].iloc[0],
                 'section_to_name': self.opdf[self.opdf['PTCAR_ID'] == row['kf_to']]['Abbreviation_BTS_French_complete'].iloc[0]
             }
