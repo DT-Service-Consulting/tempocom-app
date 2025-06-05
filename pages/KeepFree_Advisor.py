@@ -6,6 +6,7 @@ from streamlit_folium import folium_static
 from components.page_template import page_template
 import pandas as pd
 
+
 title = "📈🚉Keep Free Advisor"
 page_template(title)
 height,width, ratio = ResponsiveMap()
@@ -58,23 +59,22 @@ with mcol2:
             st.subheader("Advised Keep Frees")
             selected_keepfrees = []
             for idx, row in advised_coupures.iterrows():
+                st.divider()
                 if row['impact'] == 'CTL':
                     continue
-                col1, col2, col3, col4, col5 = st.columns(5)
+                col1, col2, col3, col4 = st.columns([3,3,2,1])
                 with col1:
                     st.write(f"From: {row['section_from_name']}")
                 with col2:
                     st.write(f"To: {row['section_to_name']}")
                 with col3:
-                    st.write(f"Impact: {row['impact']}")
+                    st.write(f"Score: {row['nb_occ']}")
                 with col4:
-                    st.write(f"Sollicitations: {row['nb_occ']}")
-                with col5:
-                    selected = st.checkbox("Add Keep Free", key=f"select_{idx}")
+                    selected = st.checkbox("+", key=f"select_{idx}", label_visibility="hidden")
                     if selected:
                         selected_keepfrees.append(row)
             submit_keepfrees = st.form_submit_button("Apply Keep Frees")
-            
+
             if submit_keepfrees and selected_keepfrees:
                 layer = coupures.render_coupure_line(pd.DataFrame(selected_keepfrees), network, opacity=1, line_weight=3, layer_name='Keep Free Advisor')
                 layer.add_to(m)
