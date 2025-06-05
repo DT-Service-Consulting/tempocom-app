@@ -3,7 +3,7 @@ import folium
 import ast
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import plotly.express as px
 class DelayBubbleMap:
     def __init__(self, stations_path: str, delay_data_path: str):
         self.stations = pd.read_csv(stations_path)
@@ -23,7 +23,7 @@ class DelayBubbleMap:
             .reset_index()
             .rename(columns={'Delay at arrival': 'Total_Delay_Minutes'})
         )
-        self.delay_summary = self.delay_summary.nlargest(20, 'Total_Delay_Minutes')
+        self.delay_summary = self.delay_summary.nlargest(10, 'Total_Delay_Minutes')
         
 
 
@@ -114,7 +114,7 @@ class DelayBubbleMap2:
             self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
 
             # Top 10 stations
-            self.delay_summary = self.delay_summary.nlargest(20, 'Total_Delay_Minutes')
+            self.delay_summary = self.delay_summary.nlargest(10, 'Total_Delay_Minutes')
 
             # ✅ APPLY STATION FILTER HERE
             if station_filter:
@@ -206,6 +206,7 @@ class DelayHeatmap:
         top_stations = (
             df.groupby("StopLabel")["Delay at departure"]
             .sum()
+            .div(60)
             .sort_values(ascending=False)
             .head(top_n)
             .index
@@ -215,27 +216,32 @@ class DelayHeatmap:
 
         heatmap_data = (
             df_top.groupby(["StopLabel", "Hour"])["Delay at departure"]
-            .mean()
+            .sum()
             .reset_index()
         )
 
         pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at departure").fillna(0)
-        pivot["Avg"] = pivot.mean(axis=1)
-        pivot = pivot.sort_values("Avg", ascending=False).drop(columns="Avg")
+        pivot["Total"] = pivot.sum(axis=1)
+        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total")
 
         self.pivot_table = pivot
 
-    def render_heatmap(self, title="Departure Delay Heatmap (Top 10 Stations)", figsize=(12, 6)):
+    def render_heatmap(self, title="Departure Delay Heatmap (Top 10 Stations by Total Delay)"):
         if self.pivot_table is None:
             raise ValueError("Run filter_and_prepare_heatmap() first.")
 
-        fig, ax = plt.subplots(figsize=figsize)
-        sns.heatmap(self.pivot_table, cmap="YlOrRd", linewidths=0.5, linecolor='gray', ax=ax)
-        ax.set_title(title)
-        ax.set_xlabel("Hour of Day")
-        ax.set_ylabel("Station")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
+        fig = px.imshow(
+            self.pivot_table,
+            labels=dict(x="Hour of Day", y="Station", color="Total Delay (min)"),
+            x=self.pivot_table.columns,
+            y=self.pivot_table.index,
+            aspect="auto",
+            color_continuous_scale="YlOrRd",
+            title=title
+        )
+
+        fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
+        fig.update_xaxes(type='category')
         return fig
 
     def load_and_prepare1(self):
@@ -268,6 +274,7 @@ class DelayHeatmap:
         top_stations = (
             df.groupby("StopLabel")["Delay at arrival"]
             .sum()
+            .div(60)  # Convert from seconds to minutes
             .sort_values(ascending=False)
             .head(top_n)
             .index
@@ -277,25 +284,30 @@ class DelayHeatmap:
 
         heatmap_data = (
             df_top.groupby(["StopLabel", "Hour"])["Delay at arrival"]
-            .mean()
+            .sum()
             .reset_index()
         )
 
         pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at arrival").fillna(0)
-        pivot["Avg"] = pivot.mean(axis=1)
-        pivot = pivot.sort_values("Avg", ascending=False).drop(columns="Avg")
+        pivot["Total"] = pivot.sum(axis=1)
+        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total")
 
         self.pivot_table = pivot
 
-    def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations)", figsize=(12, 6)):
+    def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations by Total Delay)"):
         if self.pivot_table is None:
             raise ValueError("Run filter_and_prepare_heatmap1() first.")
 
-        fig, ax = plt.subplots(figsize=figsize)
-        sns.heatmap(self.pivot_table, cmap="YlOrRd", linewidths=0.5, linecolor='gray', ax=ax)
-        ax.set_title(title)
-        ax.set_xlabel("Hour of Day")
-        ax.set_ylabel("Station")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
+        fig = px.imshow(
+            self.pivot_table,
+            labels=dict(x="Hour of Day", y="Station", color="Total Delay (min)"),
+            x=self.pivot_table.columns,
+            y=self.pivot_table.index,
+            aspect="auto",
+            color_continuous_scale="YlOrRd",
+            title=title
+        )
+
+        fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
+        fig.update_xaxes(type='category')
         return fig
