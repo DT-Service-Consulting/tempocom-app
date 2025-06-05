@@ -1,6 +1,8 @@
 import pandas as pd
 import folium
 import ast
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class DelayBubbleMap:
     def __init__(self, stations_path: str, delay_data_path: str):
@@ -161,3 +163,139 @@ class DelayBubbleMap2:
 
             folium.LayerControl().add_to(m)
             return m
+
+
+
+
+
+
+
+class DelayHeatmap:
+    def __init__(self, delay_data_path):
+        self.delay_data_path = delay_data_path
+        self.df = None
+        self.pivot_table = None
+
+    def load_and_prepare(self):
+        df = pd.read_csv(self.delay_data_path)
+
+        df["Delay at departure"] = pd.to_numeric(df["Delay at departure"], errors="coerce")
+        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
+        df["Start Station (FR)"] = df["Start Station (FR)"].astype(str)
+        df["End Station (FR)"] = df["End Station (FR)"].astype(str)
+
+        df["Actual departure time"] = pd.to_datetime(df["Actual departure time"], errors="coerce")
+        df["Hour"] = df["Actual departure time"].dt.hour
+
+        df["StopLabel"] = (
+            df["Stopping place (FR)"].str.title() +
+            " (Start: " + df["Start Station (FR)"].str.title() +
+            " → End: " + df["End Station (FR)"].str.title() + ")"
+        )
+
+        df = df.dropna(subset=["Hour", "StopLabel", "Delay at departure"])
+        self.df = df
+
+    def filter_and_prepare_heatmap(self, station_filter=None, top_n=10):
+        df = self.df.copy()
+
+        if station_filter:
+            station_filter = [s.title() for s in station_filter]
+            df = df[df["Stopping place (FR)"].isin(station_filter)]
+
+        top_stations = (
+            df.groupby("StopLabel")["Delay at departure"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(top_n)
+            .index
+        )
+
+        df_top = df[df["StopLabel"].isin(top_stations)]
+
+        heatmap_data = (
+            df_top.groupby(["StopLabel", "Hour"])["Delay at departure"]
+            .mean()
+            .reset_index()
+        )
+
+        pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at departure").fillna(0)
+        pivot["Avg"] = pivot.mean(axis=1)
+        pivot = pivot.sort_values("Avg", ascending=False).drop(columns="Avg")
+
+        self.pivot_table = pivot
+
+    def render_heatmap(self, title="Departure Delay Heatmap (Top 10 Stations)", figsize=(12, 6)):
+        if self.pivot_table is None:
+            raise ValueError("Run filter_and_prepare_heatmap() first.")
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(self.pivot_table, cmap="YlOrRd", linewidths=0.5, linecolor='gray', ax=ax)
+        ax.set_title(title)
+        ax.set_xlabel("Hour of Day")
+        ax.set_ylabel("Station")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        return fig
+
+    def load_and_prepare1(self):
+        df = pd.read_csv(self.delay_data_path)
+
+        df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
+        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
+        df["Start Station (FR)"] = df["Start Station (FR)"].astype(str)
+        df["End Station (FR)"] = df["End Station (FR)"].astype(str)
+
+        df["Actual arrival time"] = pd.to_datetime(df["Actual arrival time"], errors="coerce")
+        df["Hour"] = df["Actual arrival time"].dt.hour
+
+        df["StopLabel"] = (
+            df["Stopping place (FR)"].str.title() +
+            " (Start: " + df["Start Station (FR)"].str.title() +
+            " → End: " + df["End Station (FR)"].str.title() + ")"
+        )
+
+        df = df.dropna(subset=["Hour", "StopLabel", "Delay at arrival"])
+        self.df = df
+
+    def filter_and_prepare_heatmap1(self, station_filter=None, top_n=10):
+        df = self.df.copy()
+
+        if station_filter:
+            station_filter = [s.title() for s in station_filter]
+            df = df[df["Stopping place (FR)"].isin(station_filter)]
+
+        top_stations = (
+            df.groupby("StopLabel")["Delay at arrival"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(top_n)
+            .index
+        )
+
+        df_top = df[df["StopLabel"].isin(top_stations)]
+
+        heatmap_data = (
+            df_top.groupby(["StopLabel", "Hour"])["Delay at arrival"]
+            .mean()
+            .reset_index()
+        )
+
+        pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at arrival").fillna(0)
+        pivot["Avg"] = pivot.mean(axis=1)
+        pivot = pivot.sort_values("Avg", ascending=False).drop(columns="Avg")
+
+        self.pivot_table = pivot
+
+    def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations)", figsize=(12, 6)):
+        if self.pivot_table is None:
+            raise ValueError("Run filter_and_prepare_heatmap1() first.")
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(self.pivot_table, cmap="YlOrRd", linewidths=0.5, linecolor='gray', ax=ax)
+        ax.set_title(title)
+        ax.set_xlabel("Hour of Day")
+        ax.set_ylabel("Station")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        return fig
