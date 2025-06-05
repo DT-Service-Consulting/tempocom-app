@@ -22,6 +22,7 @@ class Coupures:
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')
         self.dat = get_mart(f'{path_to_mart}/private/colt_dat_S1_model.csv')
+        self.ctl_sections = pd.read_csv(f'{path_to_mart}/private/ctl_sections.csv')
 
         self.coupures['section_from_id'] = pd.to_numeric(self.coupures['section_from_id'], errors='coerce').fillna(-1).astype(int)
         self.coupures['section_to_id'] = pd.to_numeric(self.coupures['section_to_id'], errors='coerce').fillna(-1).astype(int)
@@ -43,7 +44,7 @@ class Coupures:
         for _, row in self.dat.iterrows():
             ctl_from_abbrev = self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']]['Abbreviation_BTS_French_complete'].iloc[0] if not self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']].empty else f"ID_{row['ctl_from']}"
             ctl_to_abbrev = self.opdf[self.opdf['PTCAR_ID'] == row['ctl_to']]['Abbreviation_BTS_French_complete'].iloc[0] if not self.opdf[self.opdf['PTCAR_ID'] == row['ctl_to']].empty else f"ID_{row['ctl_to']}"
-            combination = f"{ctl_from_abbrev} <=> {ctl_to_abbrev}"
+            combination = f"{ctl_from_abbrev} ⇔ {ctl_to_abbrev}"
             if combination not in ctl_combinations:
                 ctl_combinations.append(combination)
         return ctl_combinations

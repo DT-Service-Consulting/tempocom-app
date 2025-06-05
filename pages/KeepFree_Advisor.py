@@ -35,7 +35,7 @@ ctl_section = st.session_state.ctl_section
 with st.form("Keep Free Advisor"):
     col1, col2 = st.columns(2)
     with col1:
-        ctl_section = st.selectbox("Section to cut", options = coupures.get_ctl_sections(), index=0)
+        ctl_section = st.selectbox("Section to cut", options = coupures.ctl_sections, index=0)
     with col2:
         submit = st.form_submit_button("Add a coupure")
 
