@@ -21,6 +21,7 @@ class Coupures:
         self.coupures = get_mart(f'{path_to_mart}/private/colt.csv')
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')
+        self.dat = get_mart(f'{path_to_mart}/private/colt_dat_S1_model.csv')
 
         self.coupures['section_from_id'] = pd.to_numeric(self.coupures['section_from_id'], errors='coerce').fillna(-1).astype(int)
         self.coupures['section_to_id'] = pd.to_numeric(self.coupures['section_to_id'], errors='coerce').fillna(-1).astype(int)
@@ -36,8 +37,16 @@ class Coupures:
         self.impact = self.coupures['impact'].dropna().sort_values().unique()
         self.leaders = self.coupures['leader'].dropna().sort_values().unique()
 
-        
-        self.coupures['impact'] = self.coupures['impact'].apply(self.categorize_impact)
+
+    def get_ctl_sections(self):
+        ctl_combinations = []
+        for _, row in self.dat.iterrows():
+            ctl_from_abbrev = self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']]['Abbreviation_BTS_French_complete'].iloc[0] if not self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']].empty else f"ID_{row['ctl_from']}"
+            ctl_to_abbrev = self.opdf[self.opdf['PTCAR_ID'] == row['ctl_to']]['Abbreviation_BTS_French_complete'].iloc[0] if not self.opdf[self.opdf['PTCAR_ID'] == row['ctl_to']].empty else f"ID_{row['ctl_to']}"
+            combination = f"{ctl_from_abbrev} <=> {ctl_to_abbrev}"
+            if combination not in ctl_combinations:
+                ctl_combinations.append(combination)
+        return ctl_combinations
 
     def categorize_impact(self, impact):
         if pd.isna(impact):
@@ -78,16 +87,11 @@ class Coupures:
         )
 
     def render_coupure(self, cou_id, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
-        logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.DEBUG)
-        start_time = time.time()
-        logger.debug("▶️ Début render_coupure - cou_id=%s, layer_name=%s", cou_id, layer_name)
-
-        CoupureLayer = folium.FeatureGroup(name=layer_name)
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
+        return self.render_coupure_line(coupure, network, opacity, line_weight, layer_name)
 
-        logger.debug("Nombre de lignes de coupure filtrées : %d", len(coupure))
-
+    def render_coupure_line(self, coupure, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
+        CoupureLayer = folium.FeatureGroup(name=layer_name)
         impact_map = {
             "CTL": "CTL",
             "Keep Free": "Keep Free",
@@ -98,26 +102,23 @@ class Coupures:
         added_markers = 0
 
         for idx, row in coupure.iterrows():
-            logger.debug("Traitement ligne index=%d", idx)
-
             if pd.isna(row['section_from_id']) or pd.isna(row['section_to_id']):
-                logger.debug("⛔ section_from_id ou section_to_id manquant → skip")
+
                 continue
 
             impact_key = impact_map.get(row['impact'], "OTHER")
             style = self.PALETTES.get(impact_key, {"color": "gray", "dash": None})
             line_kw = dict(color=style["color"], weight=line_weight, opacity=opacity, dash_array=style["dash"])
-            logger.debug("Impact: %s → style: %s", row['impact'], style)
+
 
             if self.both_sections_exists_on_macro_network(row, network):
                 section_from = network.get_station_by_id(row['section_from_id'])
                 section_to = network.get_station_by_id(row['section_to_id'])
 
                 if section_from is None or section_to is None:
-                    logger.debug("❗ Station introuvable dans le réseau macro")
+
                     continue
 
-                logger.debug("↔️ Recherche plus court chemin : %s → %s", section_from['Name_FR'], section_to['Name_FR'])
 
                 path, _ = network.get_shortest_path(section_from['Name_FR'], section_to['Name_FR'])
 
@@ -128,14 +129,12 @@ class Coupures:
                             folium.PolyLine(link['Geo_Shape'], **line_kw).add_to(CoupureLayer)
                             added_lines += 1
                         else:
-                            logger.debug("❓ Lien absent pour %s → %s", path[i], path[i+1])
+                            continue
             else:
-                logger.debug("⚠️ Sections absentes du réseau macro, fallback sur Geo_Point")
                 op_from = self.get_opdf_by_id(row['section_from_id'])
                 op_to = self.get_opdf_by_id(row['section_to_id'])
 
                 if op_from is None or op_to is None:
-                    logger.debug("❌ op_from ou op_to introuvable")
                     continue
 
                 try:
@@ -153,16 +152,12 @@ class Coupures:
                     folium.Marker(
                         location=[(lat1 + lat2) / 2, (lon1 + lon2) / 2],
                         icon=folium.DivIcon(html="<span style='color:yellow;font-size:18px;'>[!]</span>"),
-                        tooltip="Lien absent du réseau réel"
+                        tooltip="Link absent from macro network"
                     ).add_to(CoupureLayer)
                     added_markers += 1
 
                 except Exception as e:
-                    logger.exception("💥 Erreur lors du parsing Geo_Point : %s", e)
                     continue
-
-            elapsed = time.time() - start_time
-            logger.debug("✅ Fin render_coupure — lignes ajoutées: %d, marqueurs: %d, durée: %.2fs", added_lines, added_markers, elapsed)
         return CoupureLayer
         
     def render_contextual_coupures(self, cou_id, network: MacroNetwork):
@@ -229,3 +224,37 @@ class Coupures:
     def get_unique_coupure_types(self,selected_columns):
         unique_coupure_types = self.coupures.groupby(selected_columns).size().reset_index(name='count')
         return unique_coupure_types
+    
+    def advise_keepfrees(self, ctl_section, network: MacroNetwork):
+        section_from_name, section_to_name = ctl_section.split(" <=> ")
+        section_from_id = self.opdf[self.opdf['Abbreviation_BTS_French_complete'] == section_from_name]['PTCAR_ID'].iloc[0]
+        section_to_id = self.opdf[self.opdf['Abbreviation_BTS_French_complete'] == section_to_name]['PTCAR_ID'].iloc[0]
+        df = self.dat
+        mask1 = (df['ctl_from'] == section_from_id) & (df['ctl_to'] == section_to_id)
+        mask2 = (df['ctl_from'] == section_to_id) & (df['ctl_to'] == section_from_id)
+        keep_free = df[mask1 | mask2]
+        
+        advised_coupures = []
+        advised_ctl = {
+            'cou_id': f"advised_ctl_{section_from_id}_{section_to_id}",
+            'section_from_id': section_from_id,
+            'section_to_id': section_to_id,
+            'section_from_name': section_from_name,
+            'section_to_name': section_to_name,
+            'impact': 'CTL',
+            'nb_occ': len(keep_free)
+        }
+        advised_coupures.append(advised_ctl)
+        for _, row in keep_free.iterrows():
+            advised_coupure = {
+                'cou_id': f"advised_{row['kf_from']}_{row['kf_to']}",
+                'section_from_id': row['kf_from'],
+                'section_to_id': row['kf_to'],
+                'impact': 'Keep Free',
+                'nb_occ': row['nb_occ'],
+                'section_from_name': self.opdf[self.opdf['PTCAR_ID'] == row['kf_from']]['Abbreviation_BTS_French_complete'].iloc[0],
+                'section_to_name': self.opdf[self.opdf['PTCAR_ID'] == row['kf_to']]['Abbreviation_BTS_French_complete'].iloc[0]
+            }
+            advised_coupures.append(advised_coupure)
+        
+        return advised_coupures

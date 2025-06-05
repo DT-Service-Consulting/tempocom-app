@@ -21,8 +21,8 @@
             "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
             "image": "assets/maintenance_icon.png",
             "private": true,
-            "redirect": "pages/Keep_Free_Advisor.py",
-            "available": false
+            "redirect": "pages/KeepFree_Advisor.py",
+            "available": true
         },
         {
             "title": "🌊Domino Effect",
