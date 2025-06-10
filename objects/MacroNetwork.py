@@ -6,7 +6,8 @@ import numpy as np
 from scipy.sparse.csgraph import floyd_warshall
 
 class MacroNetwork:
-    def __init__(self,path_to_mart:str='./mart'):      
+    def __init__(self,path_to_mart:str='./ma'
+    'rt'):      
         # extracting
         self.links = get_mart(f'{path_to_mart}/public/network_graph.csv')
         self.stations = get_mart(f'{path_to_mart}/public/stations.csv')
