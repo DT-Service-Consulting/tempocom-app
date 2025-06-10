@@ -204,13 +204,13 @@ class DelayHeatmap:
             df = df[df["Stopping place (FR)"].isin(station_filter)]
 
         top_stations = (
-            df.groupby("StopLabel")["Delay at departure"]
-            .sum()
-            .div(60)
-            .sort_values(ascending=False)
-            .head(top_n)
-            .index
-        )
+        df.groupby("StopLabel")["Delay at departure"]
+        .sum()
+        .div(60)
+        .sort_values(ascending=False)
+        .head(top_n)
+        .index
+    )
 
         df_top = df[df["StopLabel"].isin(top_stations)]
 
