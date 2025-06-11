@@ -5,7 +5,7 @@ import ast
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from objects.Dela import DelayBubbleMap
+from objects.Delay_network import DelayBubbleMap
 
 @pytest.fixture
 def mock_station_data(tmp_path):
