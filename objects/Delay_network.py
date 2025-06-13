@@ -5,13 +5,24 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 class DelayBubbleMap:
+    """
+    Visualizes total arrival delays per station as a bubble map using Folium.
+    """
     def __init__(self, stations_path: str, delay_data_path: str):
         self.stations = pd.read_csv(stations_path)
         self.delays = pd.read_csv(delay_data_path)
 
         self.prepare_data()
+        
 
     def prepare_data(self, station_filter=None):
+        """
+        Initialize DelayBubbleMap with station and delay data CSV paths.
+
+        Args:
+            stations_path (str): Path to stations CSV file.
+            delay_data_path (str): Path to delay data CSV file.
+        """
         # Filter out negative delays
         self.delays = self.delays[self.delays['Delay at arrival'] > 0]
 
@@ -46,6 +57,11 @@ class DelayBubbleMap:
         self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
 
     def render_map(self):
+        """Render a Folium bubble map of arrival delays.
+
+        Returns:
+            folium.Map: Folium map object with delay bubbles."""
+        
         if len(self.merged) == 0:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
@@ -88,7 +104,18 @@ class DelayBubbleMap:
 
 
 class DelayBubbleMap2:
+        """ Visualizes total departure delays per station as a bubble map using Folium."""
         def __init__(self, stations_path: str, delay_data_path: str):
+        
+                
+            """
+
+                Initialize DelayBubbleMap2 with station and delay data CSV paths.
+                Args:
+                    stations_path (str): Path to stations CSV file.
+                    delay_data_path (str): Path to delay data CSV file.
+            """
+        
             self.stations = pd.read_csv(stations_path)
             self.delays = pd.read_csv(delay_data_path)
 
@@ -97,6 +124,12 @@ class DelayBubbleMap2:
 
 
         def prepare_data1(self, station_filter=None):
+            """
+                Prepare and merge departure delay and station data for visualization.
+
+                Args:
+                    station_filter (list, optional): List of station names to filter. Defaults to None.
+            """
             # Filter out negative delays
             self.delays = self.delays[self.delays['Delay at departure'] > 0]
 
@@ -133,6 +166,10 @@ class DelayBubbleMap2:
             self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
                     
         def render_map1(self):
+            """Render a Folium bubble map of departure delays.
+            Returns:
+            folium.Map: Folium map object with delay bubbles.
+        """
             if len(self.merged) == 0:
                 return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
@@ -171,12 +208,24 @@ class DelayBubbleMap2:
 
 
 class DelayHeatmap:
+    """
+    Generates heatmaps of delays (arrival or departure) by station and hour.
+    """
     def __init__(self, delay_data_path):
+        """
+        Initialize DelayHeatmap with delay data CSV path.
+
+        Args:
+            delay_data_path (str): Path to delay data CSV file.
+        """
         self.delay_data_path = delay_data_path
         self.df = None
         self.pivot_table = None
 
     def load_and_prepare(self):
+        """
+        Load and prepare data for departure delay heatmap.
+        """
         df = pd.read_csv(self.delay_data_path)
 
         df["Delay at departure"] = pd.to_numeric(df["Delay at departure"], errors="coerce")
@@ -265,6 +314,13 @@ class DelayHeatmap:
         self.df = df
 
     def filter_and_prepare_heatmap1(self, station_filter=None, top_n=10):
+        """
+        Filter and aggregate data for departure delay heatmap.
+
+        Args:
+            station_filter (list, optional): List of station names to filter. Defaults to None.
+            top_n (int, optional): Number of top stations to include. Defaults to 10.
+        """
         df = self.df.copy()
 
         if station_filter:
@@ -295,6 +351,15 @@ class DelayHeatmap:
         self.pivot_table = pivot
 
     def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations by Total Delay)"):
+        """
+        Render a Plotly heatmap for departure delays.
+
+        Args:
+            title (str, optional): Title for the heatmap. Defaults to "Departure Delay Heatmap (Top 10 Stations by Total Delay)".
+
+        Returns:
+            plotly.graph_objs._figure.Figure: Plotly heatmap figure.
+        """
         if self.pivot_table is None:
             raise ValueError("Run filter_and_prepare_heatmap1() first.")
 
