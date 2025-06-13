@@ -45,3 +45,5 @@ Thumbs.db
 sensitive_deployment.sh
 env/
 ./Data_cleaning.ipynb
+/tests/
+# Jupyter Notebook
