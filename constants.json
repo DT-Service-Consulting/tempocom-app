@@ -31,6 +31,14 @@
             "private": true,
             "redirect": "pages/Domino_Effect_Analyzer.py",
             "available": false
+        },
+        {
+            "title": "🚫Network Resilience",
+            "description": "Railway Resilience Study via Topology Analysis. In collaboration with UAntwerp.",
+            "image": "assets/maintenance_icon.png",
+            "private": false,
+            "redirect": "pages/Network_Resilience.py",
+            "available": false
         }
     ],
 
