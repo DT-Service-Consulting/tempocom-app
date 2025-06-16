@@ -3,10 +3,14 @@ import streamlit as st
 from components import *
 from components.page_template import page_template
 import json
+import dotenv
+
+
+dotenv.load_dotenv('../app.env')
 
 labs = json.load(open("constants.json"))['labs'] 
 page_template("🔬All Labs🥼")
-  
+
 for i in range(0, len(labs), 3):
     cols = st.columns(3)
     for col, lab in zip(cols, labs[i:i+3]):
