@@ -1,15 +1,61 @@
 import pretty_errors
 import streamlit as st
 from components import *
-from components.page_template import page_template
-import json
-import dotenv
 
+# ------------------------------------------------------------
+#                           LABS
+# ------------------------------------------------------------
+labs = [
+    {
+        "title": "✎ Network Editor",
+        "description": "Modify links between stations and calculate the shortest path between two stations.",
+        "image": "assets/network_icon.png",
+        "internal": False,
+        "redirect": "pages/Network_Editor.py",
+        "available": True
+    },
+    {
+        "title": "🚧CoLT Browser",
+        "description": "Browse the differents coupures for track works.",
+        "image": "assets/maintenance_icon.png",
+        "internal": True,
+        "redirect": "pages/CoLT_Browser.py",
+        "available": True
+    },
+    {
+        "title": "📈🚉Keep Free Advisor",
+        "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
+        "image": "assets/maintenance_icon.png",
+        "internal": True,
+        "redirect": "pages/Keep_Free_Advisor.py",
+        "available": False
+    },
+    {
+        "title": "🌊Domino Effect",
+        "description": "Analyze the domino effect of disruptions on the railway network.",
+        "image": "assets/maintenance_icon.png",
+        "internal": True,
+        "redirect": "pages/Domino_Effect_Analyzer.py",
+        "available": False
+    }
+]
 
-dotenv.load_dotenv('../app.env')
+# ------------------------------------------------------------
+#                           PAGE CONFIGURATION
+# ------------------------------------------------------------
+st.set_page_config(layout="wide", page_title="TEMPOCOM - Railway Digital Twin", page_icon="🚄")
+st.logo("assets/logo.png",size="large")
 
-labs = json.load(open("constants.json"))['labs'] 
-page_template("🔬All Labs🥼")
+with st.sidebar:
+    st.markdown("Data provided by")
+    st.image("assets/infrabel.png", width=200, clamp=True)
+    st.markdown("Developed by")
+    st.image("assets/brain-logo.png", width=200, clamp=True)
+    
+st.markdown(
+    '''<h1 style='text-align: center;'>
+            🔬All Labs🥼
+    </h1>''', unsafe_allow_html=True)
 
 for i in range(0, len(labs), 3):
     cols = st.columns(3)
