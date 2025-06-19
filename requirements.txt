@@ -1,0 +1,12 @@
+streamlit==1.44.1
+folium
+streamlit-folium
+pandas
+scipy
+matplotlib
+seaborn
+plotly
+pytest
+anyio
+pretty-errors
+python-dotenv
