@@ -54,7 +54,6 @@ with st.form("filter_coupure"):
     with col4:
         period = st.multiselect("Filter by period type ☀️", options=coupures.period_type, key="period_type")
     with col5:
-
         status = st.multiselect("Filter by status ✅", options=coupures.status, key="status")
 
     search = st.form_submit_button("Search 🔍")

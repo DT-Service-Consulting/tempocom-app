@@ -1,7 +1,6 @@
 import streamlit as st
 import folium
-
-from objects.MacroNetwork import MacroNetwork
+from objects import MacroNetwork
 from streamlit_folium import folium_static
 import pandas as pd
 from components import *

@@ -3,40 +3,35 @@
         {
             "title": "✎ Network Editor",
             "description": "Modify links between stations and calculate the shortest path between two stations.",
-            "image": "assets/network_icon.png",
-            "private": false,
+            "access": "public",
             "redirect": "pages/Network_Editor.py",
             "available": true
         },
         {
             "title": "🚧 CoLT Browser",
             "description": "Browse the differents coupures for track works.",
-            "image": "assets/maintenance_icon.png",
-            "private": true,
+            "access": "private",
             "redirect": "pages/CoLT_Browser.py",
             "available": true
         },
         {
             "title": "📈🚉Keep Free Advisor",
             "description": "Get the best advises on Keeping free lines when a line is closed. Infrabel Use Case.",
-            "image": "assets/maintenance_icon.png",
-            "private": true,
+            "access": "private",
             "redirect": "pages/KeepFree_Advisor.py",
             "available": true
         },
         {
-            "title": "🌊Domino Effect",
+            "title": "🌊Domino Effect Analyzer",
             "description": "Analyze the domino effect of disruptions on the railway network.",
-            "image": "assets/maintenance_icon.png",
-            "private": true,
+            "access": "mix",
             "redirect": "pages/Domino_Effect_Analyzer.py",
-            "available": false
+            "available": true
         },
         {
             "title": "🚫Network Resilience",
             "description": "Railway Resilience Study via Topology Analysis. In collaboration with UAntwerp.",
-            "image": "assets/maintenance_icon.png",
-            "private": false,
+            "access": "public",
             "redirect": "pages/Network_Resilience.py",
             "available": false
         }

@@ -4,9 +4,10 @@ from components import *
 from components.page_template import page_template
 import json
 import dotenv
+import sys
 
-
-dotenv.load_dotenv('../app.env')
+sys.path.append('..')
+dotenv.load_dotenv('../tempocom_config/.env')
 
 labs = json.load(open("constants.json"))['labs'] 
 page_template("🔬All Labs🥼")

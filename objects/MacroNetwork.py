@@ -4,9 +4,13 @@ import pandas as pd
 import ast
 import numpy as np
 from scipy.sparse.csgraph import floyd_warshall
+import os
+from dotenv import load_dotenv
+
+
 
 class MacroNetwork:
-    def __init__(self,path_to_mart:str='./mart'):      
+    def __init__(self,path_to_mart:str=os.getenv('MART_RELATIVE_PATH')):      
         # extracting
         self.links = get_mart(f'{path_to_mart}/public/network_graph.csv')
         self.stations = get_mart(f'{path_to_mart}/public/stations.csv')
