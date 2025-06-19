@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2
 from objects.Delay_network import DelayHeatmap
-
+import os
 st.set_page_config(layout="wide")
 st.title("⏱️ Delay Visualization Dashboard")
 
@@ -10,15 +10,15 @@ st.title("⏱️ Delay Visualization Dashboard")
 @st.cache_resource
 def load_map():
     return DelayBubbleMap(
-        stations_path="./mart/public/stations.csv",
-        delay_data_path="./mart/public/delays_standardized_titlecase.csv"
+        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
+        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
     )
 
 @st.cache_resource
 def load_map1():
     return DelayBubbleMap2(
-        stations_path="./mart/public/stations.csv",
-        delay_data_path="./mart/public/delays_standardized_titlecase.csv"
+        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
+        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
     )
 
 # Prepare data
@@ -61,7 +61,7 @@ with col2:
 st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
 
 # Load heatmap data
-heatmap = DelayHeatmap(delay_data_path="./mart/public/delays_standardized_titlecase.csv")
+heatmap = DelayHeatmap(delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv")
 
 col3, col4 = st.columns(2)
 

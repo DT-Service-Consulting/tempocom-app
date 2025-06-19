@@ -5,7 +5,8 @@ description = "Application de gestion de réseau de transport"
 authors = ["Your Name <your.email@example.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
+python = ">=3.10,<4.0"
+matplotlib = "^3.10.3"
 folium = "^0.15.1"
 pandas = "^2.2.0"
 numpy = "^1.26.0"
@@ -15,6 +16,9 @@ streamlit-folium = "^0.15.0"
 python-dotenv = "^1.0.0"
 pretty-errors = "^1.2.25"
 pydeck = "^0.9.1"
+pytest = "^8.4.1"
+seaborn = "^0.13.2"
+plotly = "^6.1.2"
 
 
 [tool.poetry.group.dev.dependencies]

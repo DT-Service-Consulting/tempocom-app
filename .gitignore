@@ -39,6 +39,7 @@ Thumbs.db
 /mart/private/*
 .DS_Store
 **/.DS_Store
-brouillon.ipynb
+brouillon.
+/scripts/*
 sensitive_deployment.sh
 brouillon.ipynb
