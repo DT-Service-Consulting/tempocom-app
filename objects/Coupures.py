@@ -12,7 +12,7 @@ class Coupures:
             "OTHER": {"color": "#fd6c9e", "dash": None, "label": "Autre impact"},
         }
 
-    def __init__(self,path_to_mart:str=os.getenv('RELATIVE_MART_PATH')):
+    def __init__(self,path_to_mart:str=os.getenv('MART_RELATIVE_PATH')):
         self.coupures = get_mart(f'{path_to_mart}/private/colt.csv')
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')

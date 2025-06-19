@@ -6,7 +6,7 @@ import json
 import dotenv
 
 
-dotenv.load_dotenv('../app.env')
+dotenv.load_dotenv('../tempocom_config/.env')
 
 labs = json.load(open("constants.json"))['labs'] 
 page_template("🔬All Labs🥼")

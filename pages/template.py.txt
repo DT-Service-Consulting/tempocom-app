@@ -17,7 +17,7 @@ page_template(title)
 def load(): return ..........
 
 #Using loading method
-......... = load()
+....., .... = load()
 # set to streamlit state
 if '.......' not in st.session_state: st.session_state. ....... = .......
 #get from session state
