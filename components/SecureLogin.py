@@ -21,6 +21,8 @@ class SecureLogin:
             st.session_state.email = ""
         if "otp" not in st.session_state:
             st.session_state.otp = None
+        if "access" not in st.session_state:
+            st.session_state.access = None
 
     def send_otp_email(self, to_email, otp_code):
         msg = MIMEText(f"Here is your verification code: {otp_code}")
@@ -38,14 +40,18 @@ class SecureLogin:
             st.info("For demo purposes, here is your OTP code: " + otp_code)
 
     def render(self, title: str):
+        
         labs = json.load(open("constants.json"))['labs']
         current_lab = next((lab for lab in labs if lab["title"] == title), None)
-        if not current_lab['private']:
+
+        if st.session_state.access == "limited" and current_lab.get('access') != 'mix':
+            st.session_state.step = "login"
+            st.session_state.access = None
             return True
-        elif self.environment == 'dev':
-            return True
-        
-        if st.session_state.step == "logged_in":
+
+        if (current_lab['access'] == 'public' 
+        or self.environment == 'dev' 
+        or st.session_state.step == "logged_in"):
             return True
         
         if st.session_state.step == "login":
@@ -72,7 +78,14 @@ class SecureLogin:
                 else:
                     st.success("Login successful ✅")
                     st.session_state.step = "logged_in"
+                    st.session_state.logged=True
                     st.rerun()
+
+        if current_lab.get('access') == 'mix' and st.session_state.step == "login":
+            if st.button("Continue with public data", type="primary"):
+                st.session_state.access = "limited"
+                st.session_state.step = "logged_in"
+                st.rerun()
 
         if st.session_state.step == "verify":
             st.title("2FA Verification")
@@ -83,6 +96,7 @@ class SecureLogin:
                     return False
                 st.success("Login successful ✅")
                 st.session_state.step = "logged_in"
+                st.session_state.logged=True
                 st.rerun()
 
         return False

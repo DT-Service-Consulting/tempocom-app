@@ -1,11 +1,6 @@
-import pandas as pd
 from utils import get_mart
-import folium
 from objects.MacroNetwork import MacroNetwork
-import ast
-import streamlit as st
-import logging
-import time
+import logging,time,os,ast,folium, pandas as pd, streamlit as st, utils, sys
 
 class Coupures:
 
@@ -17,7 +12,7 @@ class Coupures:
             "OTHER": {"color": "#fd6c9e", "dash": None, "label": "Autre impact"},
         }
 
-    def __init__(self,path_to_mart:str='./mart'):
+    def __init__(self,path_to_mart:str=os.getenv('RELATIVE_MART_PATH')):
         self.coupures = get_mart(f'{path_to_mart}/private/colt.csv')
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')

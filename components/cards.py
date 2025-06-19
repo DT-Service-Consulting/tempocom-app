@@ -1,13 +1,17 @@
 def labs_card(lab:dict):
      
     internal_style={
-       True:{
+       "private":{
           'color':'#60B2E0',
           'text':'PRIVATE'
        },
-       False:{
+       "public":{
           'color':'grey',
           'text':'PUBLIC'
+       },
+       "mix":{
+          'color':'#008000',
+          'text':'PUBLIC & PRIVATE'
        }
     }
 
@@ -18,7 +22,7 @@ def labs_card(lab:dict):
             <div>
                 <h3>{lab.get('title','Title')}</h3>
                 <p>{lab.get('description','Description')}</p>
-                <div style='color: {internal_style[lab['private']]['color']}; font-weight: bold;'>{internal_style[lab['private']]['text']}</div>
+                <div style='color: {internal_style[lab['access']]['color']}; font-weight: bold;'>{internal_style[lab['access']]['text']}</div>
             </div>
         </div>
         """
