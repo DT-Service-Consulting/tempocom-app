@@ -5,15 +5,49 @@ from io import BytesIO
 import tempfile
 from pyspark.sql import DataFrame, SparkSession
 from typing import Any
+
 class LakeReader:
+    """
+    A class for reading data files from Azure Data Lake Storage using PySpark.
+    
+    This class provides methods to download and read various file formats (CSV, Parquet)
+    from Azure Data Lake Storage, converting them to Spark DataFrames.
+    
+    Attributes:
+        spark (SparkSession): The Spark session for DataFrame operations
+        connection_string (str): Azure Blob Storage connection string
+        loaded_data (dict): Cache of loaded DataFrames indexed by blob/filename
+    """
 
     def __init__(self, spark: SparkSession):
+        """
+        Initialize the LakeReader with a Spark session.
+        
+        Args:
+            spark (SparkSession): The Spark session for DataFrame operations
+            
+        Note:
+            Loads Azure Blob connection string from environment variables.
+        """
         load_dotenv(os.path.join(os.path.dirname(__file__), '../config/.env'))
         self.spark = spark
         self.connection_string = os.getenv("AZURE_BLOB_CONN")
         self.loaded_data = {}
 
-    def download_file(self, blob: str, filename: str) -> DataFrame:
+    def download_file(self, blob: str, filename: str) -> bytes:
+        """
+        Download a file from Azure Data Lake Storage.
+        
+        Args:
+            blob (str): The blob container name
+            filename (str): The name of the file to download
+            
+        Returns:
+            bytes: The downloaded file content as bytes
+            
+        Raises:
+            Exception: If download fails
+        """
         try:
             service_client = DataLakeServiceClient.from_connection_string(self.connection_string)
             file_system_client = service_client.get_file_system_client(blob)
@@ -26,6 +60,21 @@ class LakeReader:
             raise
     
     def create_temp_file(self, downloaded_bytes: bytes, blob: str, filename: str, suffix: str) -> str:
+        """
+        Create a temporary file from downloaded bytes.
+        
+        Args:
+            downloaded_bytes (bytes): The file content as bytes
+            blob (str): The blob container name (for reference)
+            filename (str): The original filename (for reference)
+            suffix (str): The file extension suffix (e.g., '.csv', '.parquet')
+            
+        Returns:
+            str: The path to the created temporary file
+            
+        Raises:
+            Exception: If temporary file creation fails
+        """
         try:
             # Convert the downloaded bytes to a Spark DataFrame
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
@@ -37,6 +86,21 @@ class LakeReader:
             raise
     
     def read_csv(self, blob: str, filename: str, sep=';') -> DataFrame:
+        """
+        Read a CSV file from Azure Data Lake Storage into a Spark DataFrame.
+        
+        Args:
+            blob (str): The blob container name
+            filename (str): The name of the CSV file
+            sep (str, optional): The delimiter character. Defaults to ';'.
+            
+        Returns:
+            DataFrame: Spark DataFrame containing the CSV data
+            
+        Raises:
+            FileNotFoundError: If the temporary file doesn't exist
+            Exception: If reading the CSV file fails
+        """
         try:
             downloaded_bytes = self.download_file(blob, filename)
             temp_file_path = self.create_temp_file(downloaded_bytes, blob, filename, ".csv")
@@ -57,6 +121,23 @@ class LakeReader:
             raise
     
     def read_parquet(self, blob: str, filename: str) -> DataFrame:
+        """
+        Read a Parquet file from Azure Data Lake Storage into a Spark DataFrame.
+        
+        Args:
+            blob (str): The blob container name
+            filename (str): The name of the Parquet file
+            
+        Returns:
+            DataFrame: Spark DataFrame containing the Parquet data
+            
+        Raises:
+            FileNotFoundError: If the temporary file doesn't exist
+            Exception: If reading the Parquet file fails
+            
+        Note:
+            The DataFrame is cached in loaded_data for potential reuse.
+        """
         try:
             downloaded_bytes = self.download_file(blob, filename)
             temp_file_path = self.create_temp_file(downloaded_bytes, blob, filename, ".parquet")

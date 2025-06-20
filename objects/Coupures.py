@@ -3,6 +3,24 @@ from objects.MacroNetwork import MacroNetwork
 import logging,time,os,ast,folium, pandas as pd, streamlit as st, utils, sys
 
 class Coupures:
+    """
+    A class for managing and visualizing railway disruptions (coupures) data.
+    
+    This class handles railway disruption data including CTL (Contrôle Technique de Ligne),
+    Keep Free, SAVU, and other impact types. It provides methods for filtering, rendering,
+    and analyzing disruption data on railway networks.
+    
+    Attributes:
+        coupures (DataFrame): Main disruption data
+        opdf (DataFrame): Operational points data
+        descriptions (DataFrame): Disruption descriptions
+        dat (DataFrame): DAT (Données d'Analyse Technique) model data
+        ctl_sections (DataFrame): CTL sections data
+        status (array): Unique status values for filtering
+        period_type (array): Unique period types for filtering
+        impact (array): Unique impact types for filtering
+        leaders (array): Unique leader values for filtering
+    """
 
     PALETTES = {
             "CTL": {"color": "#FF0000", "dash": None, "label": "CTL"},
@@ -13,6 +31,18 @@ class Coupures:
         }
 
     def __init__(self,path_to_mart:str=os.getenv('MART_RELATIVE_PATH')):
+        """
+        Initialize the Coupures object with data from the mart directory.
+        
+        Args:
+            path_to_mart (str): Path to the mart directory containing data files.
+                Defaults to MART_RELATIVE_PATH environment variable.
+                
+        Note:
+            Loads and preprocesses various CSV files including coupures, opdf,
+            descriptions, dat model, and ctl sections. Converts data types and
+            extracts unique filter values.
+        """
         self.coupures = get_mart(f'{path_to_mart}/private/colt.csv')
         self.opdf = get_mart(f'{path_to_mart}/public/opdf.csv')
         self.descriptions = get_mart(f'{path_to_mart}/private/colt_descriptions.csv')
@@ -35,6 +65,12 @@ class Coupures:
 
 
     def get_ctl_sections(self):
+        """
+        Get unique CTL section combinations from the DAT model.
+        
+        Returns:
+            list: List of CTL section combinations in format "From ⇔ To"
+        """
         ctl_combinations = []
         for _, row in self.dat.iterrows():
             ctl_from_abbrev = self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']]['Abbreviation_BTS_French_complete'].iloc[0] if not self.opdf[self.opdf['PTCAR_ID'] == row['ctl_from']].empty else f"ID_{row['ctl_from']}"
@@ -45,6 +81,15 @@ class Coupures:
         return ctl_combinations
 
     def categorize_impact(self, impact):
+        """
+        Categorize impact types into predefined categories.
+        
+        Args:
+            impact: The impact value to categorize
+            
+        Returns:
+            str: Categorized impact type ('CTL', 'Keep Free', 'SAVU', 'Travaux possibles', or 'Autre')
+        """
         if pd.isna(impact):
             return 'Autre'
         impact = str(impact)
@@ -60,6 +105,15 @@ class Coupures:
             return 'Autre'
 
     def get_opdf_by_id(self, id):
+        """
+        Get operational point data by PTCAR_ID.
+        
+        Args:
+            id: The PTCAR_ID to search for
+            
+        Returns:
+            Series or None: Operational point data if found, None otherwise
+        """
         result = self.opdf[self.opdf['PTCAR_ID'] == id]
         if not result.empty:
             return result.iloc[0]
@@ -67,6 +121,15 @@ class Coupures:
             return None
     
     def render_op(self, opdf_id):
+        """
+        Render an operational point as a Folium marker.
+        
+        Args:
+            opdf_id: The PTCAR_ID of the operational point
+            
+        Returns:
+            folium.CircleMarker or None: Folium marker for the operational point, None if not found
+        """
         op = self.get_opdf_by_id(opdf_id)
         if op is None:
             return None
@@ -83,10 +146,36 @@ class Coupures:
         )
 
     def render_coupure(self, cou_id, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
+        """
+        Render a specific disruption on the network map.
+        
+        Args:
+            cou_id: The disruption ID to render
+            network (MacroNetwork): The network object containing station and link data
+            opacity (float, optional): Line opacity. Defaults to 1.
+            line_weight (int, optional): Line weight. Defaults to 7.
+            layer_name (str, optional): Name of the Folium layer. Defaults to 'Coupures'.
+            
+        Returns:
+            folium.FeatureGroup: Folium layer containing the rendered disruption
+        """
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
         return self.render_coupure_line(coupure, network, opacity, line_weight, layer_name)
 
     def render_coupure_line(self, coupure, network: MacroNetwork, opacity=1, line_weight=7, layer_name='Coupures'):
+        """
+        Render disruption lines on the network map.
+        
+        Args:
+            coupure (DataFrame): Disruption data to render
+            network (MacroNetwork): The network object containing station and link data
+            opacity (float, optional): Line opacity. Defaults to 1.
+            line_weight (int, optional): Line weight. Defaults to 7.
+            layer_name (str, optional): Name of the Folium layer. Defaults to 'Coupures'.
+            
+        Returns:
+            folium.FeatureGroup: Folium layer containing the rendered disruption lines
+        """
         CoupureLayer = folium.FeatureGroup(name=layer_name)
         impact_map = {
             "CTL": "CTL",
@@ -157,6 +246,16 @@ class Coupures:
         return CoupureLayer
         
     def render_contextual_coupures(self, cou_id, network: MacroNetwork):
+        """
+        Render disruptions that overlap in time with a specific disruption.
+        
+        Args:
+            cou_id: The reference disruption ID
+            network (MacroNetwork): The network object containing station and link data
+            
+        Returns:
+            folium.FeatureGroup or None: Folium layer containing overlapping disruptions, None if none found
+        """
         coupure = self.coupures[self.coupures['cou_id'] == cou_id]
         coupure = coupure[coupure['status'] == 'Y'].drop_duplicates('cou_id')
         
@@ -201,6 +300,15 @@ class Coupures:
         return CoupureLayer
             
     def get_cou_id_list_by_filter(self, filter):
+        """
+        Get list of disruption IDs based on filter criteria.
+        
+        Args:
+            filter (dict): Dictionary containing filter criteria with column names as keys
+            
+        Returns:
+            list: List of disruption IDs matching the filter criteria
+        """
         df = self.coupures.copy()
         
         for key, value in filter.items():
@@ -213,15 +321,43 @@ class Coupures:
         return df['cou_id'].unique().tolist()
     
     def both_sections_exists_on_macro_network(self, cou_id, network: MacroNetwork):
+        """
+        Check if both sections of a disruption exist in the macro network.
+        
+        Args:
+            cou_id: Disruption data row containing section_from_id and section_to_id
+            network (MacroNetwork): The network object to check against
+            
+        Returns:
+            bool: True if both sections exist in the network, False otherwise
+        """
         return (cou_id['section_from_id'] in network.stations['PTCAR_ID'].values and 
                 cou_id['section_to_id'] in network.stations['PTCAR_ID'].values)
 
     
     def get_unique_coupure_types(self,selected_columns):
+        """
+        Get unique disruption types grouped by selected columns.
+        
+        Args:
+            selected_columns (list): List of column names to group by
+            
+        Returns:
+            DataFrame: DataFrame containing unique combinations and their counts
+        """
         unique_coupure_types = self.coupures.groupby(selected_columns).size().reset_index(name='count')
         return unique_coupure_types
     
     def get_kf_pred(self, nb_occ):
+        """
+        Get Keep Free prediction emoji based on occurrence count.
+        
+        Args:
+            nb_occ (int): Number of occurrences
+            
+        Returns:
+            str: Emoji representing the prediction level (💎, 🥇, 🥈, 🥉)
+        """
         if nb_occ >= 10:
             return "💎"
         elif nb_occ >= 5:
@@ -232,6 +368,16 @@ class Coupures:
             return "🥉"
     
     def advise_keepfrees(self, ctl_section, network: MacroNetwork):
+        """
+        Generate Keep Free advice for a specific CTL section.
+        
+        Args:
+            ctl_section (str): CTL section in format "From <=> To"
+            network (MacroNetwork): The network object (not used in current implementation)
+            
+        Returns:
+            list: List of dictionaries containing advised disruptions with their details
+        """
         section_from_name, section_to_name = ctl_section.split(" <=> ")
         section_from_id = self.opdf[self.opdf['Abbreviation_BTS_French_complete'] == section_from_name]['PTCAR_ID'].iloc[0]
         section_to_id = self.opdf[self.opdf['Abbreviation_BTS_French_complete'] == section_to_name]['PTCAR_ID'].iloc[0]
