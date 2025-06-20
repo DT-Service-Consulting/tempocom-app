@@ -1,3 +1,30 @@
+"""
+Delay_Calculator.py
+
+Streamlit dashboard for visualizing train delay data using interactive maps and heatmaps.
+
+Features:
+- Loads and caches delay data for efficient visualization.
+- Displays side-by-side bubble maps for departure and arrival delays at train stations.
+- Allows users to filter stations shown on the maps via a multi-select widget.
+- Shows heatmaps of delays for the top 10 stations (departure and arrival) using Plotly.
+- Utilizes custom DelayBubbleMap, DelayBubbleMap2, and DelayHeatmap classes for data processing and visualization.
+
+Environment Variables:
+- Expects 'MART_RELATIVE_PATH' to be set for locating data files.
+
+Dependencies:
+- streamlit
+- streamlit_folium
+- plotly
+- objects.Delay_network (custom module)
+
+Author: Mohamad Hussain
+Date: [2025-06-20]
+"""
+
+
+
 import streamlit as st
 from streamlit_folium import st_folium
 from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2

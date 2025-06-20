@@ -1,21 +1,46 @@
+"""
+Delay_network.py
+
+This module provides classes for visualizing train delay data using interactive bubble maps and heatmaps.
+
+Classes:
+- DelayBubbleMap: Visualizes total arrival delays per station as a Folium bubble map.
+- DelayBubbleMap2: Visualizes total departure delays per station as a Folium bubble map.
+- DelayHeatmap: Generates Plotly heatmaps of delays (arrival or departure) by station and hour.
+
+Features:
+- Reads station and delay data from CSV files.
+- Aggregates and filters delay data for visualization.
+- Supports filtering by station.
+- Produces interactive maps and heatmaps for use in dashboards.
+
+Dependencies:
+- pandas
+- folium
+- ast
+- matplotlib
+- seaborn
+- plotly
+
+Author: Mohamad Hussain
+Date: [2025-06-20]
+"""
+
+
+
+
 import pandas as pd
 import folium
 import ast
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
+
 class DelayBubbleMap:
     """
     Visualizes total arrival delays per station as a bubble map using Folium.
     """
     def __init__(self, stations_path: str, delay_data_path: str):
-        self.stations = pd.read_csv(stations_path)
-        self.delays = pd.read_csv(delay_data_path)
-
-        self.prepare_data()
-        
-
-    def prepare_data(self, station_filter=None):
         """
         Initialize DelayBubbleMap with station and delay data CSV paths.
 
@@ -23,29 +48,40 @@ class DelayBubbleMap:
             stations_path (str): Path to stations CSV file.
             delay_data_path (str): Path to delay data CSV file.
         """
+        self.stations = pd.read_csv(stations_path)
+        self.delays = pd.read_csv(delay_data_path)
+        self.prepare_data()
+
+    def prepare_data(self, station_filter=None):
+        """
+        Prepare and merge arrival delay and station data.
+
+        Args:
+            station_filter (list, optional): List of station names to filter. Defaults to None.
+        """
         # Filter out negative delays
         self.delays = self.delays[self.delays['Delay at arrival'] > 0]
 
-        # Sum delay in **minutes** per station
+        # Sum delay in minutes per station
         self.delay_summary = (
             self.delays.groupby('Stopping place (FR)')['Delay at arrival']
             .sum()
-            .div(60)  # Convert from seconds to minutes
+            .div(60)
             .reset_index()
             .rename(columns={'Delay at arrival': 'Total_Delay_Minutes'})
         )
         self.delay_summary = self.delay_summary.nlargest(10, 'Total_Delay_Minutes')
-        
 
-
-        # Normalize station names to title case for joining
+        # Title case for merging
         self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.title()
         self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
+
+        # Apply optional station filter
         if station_filter:
             station_filter = [s.title() for s in station_filter]
             self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
 
-        # Merge delay data with station info
+        # Merge with station geolocation
         self.merged = self.delay_summary.merge(
             self.stations[['Name_FR', 'Geo_Point']],
             left_on='Stopping place (FR)',
@@ -53,19 +89,20 @@ class DelayBubbleMap:
             how='inner'
         )
 
-        # Parse coordinates
+        # Convert string coordinates to tuples
         self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
 
     def render_map(self):
-        """Render a Folium bubble map of arrival delays.
+        """
+        Render a Folium bubble map of arrival delays.
 
         Returns:
-            folium.Map: Folium map object with delay bubbles."""
-        
+            folium.Map: Folium map object with delay bubbles.
+        """
         if len(self.merged) == 0:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-        # Auto-center
+        # Center the map based on average lat/lon
         lats = [pt[0] for pt in self.merged['Geo_Point']]
         lons = [pt[1] for pt in self.merged['Geo_Point']]
         center_lat = sum(lats) / len(lats)
@@ -75,7 +112,7 @@ class DelayBubbleMap:
 
         for _, row in self.merged.iterrows():
             delay_min = row['Total_Delay_Minutes']
-            radius = min(max(delay_min / 10, 3), 15)  # scale bubble size
+            radius = min(max(delay_min / 10, 3), 15)
 
             popup = f"{row['Name_FR']}<br> Total Arrival Delay: {round(delay_min, 1)} min"
 
@@ -92,124 +129,100 @@ class DelayBubbleMap:
 
         folium.LayerControl().add_to(m)
         return m
-    
-
-
-
-
-    
-
-
-
 
 
 class DelayBubbleMap2:
-        """ Visualizes total departure delays per station as a bubble map using Folium."""
-        def __init__(self, stations_path: str, delay_data_path: str):
-        
-                
-            """
+    """
+    Visualizes total departure delays per station as a bubble map using Folium.
+    """
+    def __init__(self, stations_path: str, delay_data_path: str):
+        """
+        Initialize DelayBubbleMap2 with station and delay data CSV paths.
 
-                Initialize DelayBubbleMap2 with station and delay data CSV paths.
-                Args:
-                    stations_path (str): Path to stations CSV file.
-                    delay_data_path (str): Path to delay data CSV file.
-            """
-        
-            self.stations = pd.read_csv(stations_path)
-            self.delays = pd.read_csv(delay_data_path)
+        Args:
+            stations_path (str): Path to stations CSV file.
+            delay_data_path (str): Path to delay data CSV file.
+        """
+        self.stations = pd.read_csv(stations_path)
+        self.delays = pd.read_csv(delay_data_path)
+        self.prepare_data1()
 
-            self.prepare_data1()
+    def prepare_data1(self, station_filter=None):
+        """
+        Prepare and merge departure delay and station data.
 
+        Args:
+            station_filter (list, optional): List of station names to filter. Defaults to None.
+        """
+        self.delays = self.delays[self.delays['Delay at departure'] > 0]
 
+        self.delay_summary = (
+            self.delays.groupby('Stopping place (FR)')['Delay at departure']
+            .sum()
+            .div(60)
+            .reset_index()
+            .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
+        )
 
-        def prepare_data1(self, station_filter=None):
-            """
-                Prepare and merge departure delay and station data for visualization.
+        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.title()
+        self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
 
-                Args:
-                    station_filter (list, optional): List of station names to filter. Defaults to None.
-            """
-            # Filter out negative delays
-            self.delays = self.delays[self.delays['Delay at departure'] > 0]
+        self.delay_summary = self.delay_summary.nlargest(10, 'Total_Delay_Minutes')
 
-            # Sum delay in minutes per station
-            self.delay_summary = (
-                self.delays.groupby('Stopping place (FR)')['Delay at departure']
-                .sum()
-                .div(60)
-                .reset_index()
-                .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
-            )
+        if station_filter:
+            station_filter = [s.title() for s in station_filter]
+            self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
 
-            # Title case for merging
-            self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.title()
-            self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
+        self.merged = self.delay_summary.merge(
+            self.stations[['Name_FR', 'Geo_Point']],
+            left_on='Stopping place (FR)',
+            right_on='Name_FR',
+            how='inner'
+        )
 
-            # Top 10 stations
-            self.delay_summary = self.delay_summary.nlargest(10, 'Total_Delay_Minutes')
+        self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
 
-            # ✅ APPLY STATION FILTER HERE
-            if station_filter:
-                station_filter = [s.title() for s in station_filter]
-                self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
+    def render_map1(self):
+        """
+        Render a Folium bubble map of departure delays.
 
-            # Merge with station geolocation
-            self.merged = self.delay_summary.merge(
-                self.stations[['Name_FR', 'Geo_Point']],
-                left_on='Stopping place (FR)',
-                right_on='Name_FR',
-                how='inner'
-            )
-
-            # Parse coordinates
-            self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
-                    
-        def render_map1(self):
-            """Render a Folium bubble map of departure delays.
-            Returns:
+        Returns:
             folium.Map: Folium map object with delay bubbles.
         """
-            if len(self.merged) == 0:
-                return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
+        if len(self.merged) == 0:
+            return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-            # Auto-center map
-            lats = [pt[0] for pt in self.merged['Geo_Point']]
-            lons = [pt[1] for pt in self.merged['Geo_Point']]
-            center_lat = sum(lats) / len(lats)
-            center_lon = sum(lons) / len(lons)
+        lats = [pt[0] for pt in self.merged['Geo_Point']]
+        lons = [pt[1] for pt in self.merged['Geo_Point']]
+        center_lat = sum(lats) / len(lats)
+        center_lon = sum(lons) / len(lons)
 
-            m = folium.Map(location=(center_lat, center_lon), zoom_start=7, tiles="cartodb positron")
+        m = folium.Map(location=(center_lat, center_lon), zoom_start=7, tiles="cartodb positron")
 
-            for _, row in self.merged.iterrows():
-                delay_min = row['Total_Delay_Minutes']
-                radius = min(max(delay_min / 10, 3), 15)  # scale bubble size
+        for _, row in self.merged.iterrows():
+            delay_min = row['Total_Delay_Minutes']
+            radius = min(max(delay_min / 10, 3), 15)
 
-                popup = f"{row['Name_FR']}<br>Total Departure Delay: {round(delay_min, 1)} min"
+            popup = f"{row['Name_FR']}<br>Total Departure Delay: {round(delay_min, 1)} min"
 
-                folium.CircleMarker(
-                    location=row['Geo_Point'],
-                    radius=radius,
-                    color="crimson",
-                    fill=True,
-                    fill_color="orange",
-                    fill_opacity=0.7,
-                    popup=popup,
-                    tooltip=popup
-                ).add_to(m)
+            folium.CircleMarker(
+                location=row['Geo_Point'],
+                radius=radius,
+                color="crimson",
+                fill=True,
+                fill_color="orange",
+                fill_opacity=0.7,
+                popup=popup,
+                tooltip=popup
+            ).add_to(m)
 
-            folium.LayerControl().add_to(m)
-            return m
-
-
-
-
-
+        folium.LayerControl().add_to(m)
+        return m
 
 
 class DelayHeatmap:
     """
-    Generates heatmaps of delays (arrival or departure) by station and hour.
+    Generates heatmaps of delays (arrival or departure) by station and hour using Plotly.
     """
     def __init__(self, delay_data_path):
         """
@@ -246,6 +259,13 @@ class DelayHeatmap:
         self.df = df
 
     def filter_and_prepare_heatmap(self, station_filter=None, top_n=10):
+        """
+        Filter and aggregate data for departure delay heatmap.
+
+        Args:
+            station_filter (list, optional): List of station names to filter. Defaults to None.
+            top_n (int, optional): Number of top stations to include. Defaults to 10.
+        """
         df = self.df.copy()
 
         if station_filter:
@@ -253,13 +273,13 @@ class DelayHeatmap:
             df = df[df["Stopping place (FR)"].isin(station_filter)]
 
         top_stations = (
-        df.groupby("StopLabel")["Delay at departure"]
-        .sum()
-        .div(60)
-        .sort_values(ascending=False)
-        .head(top_n)
-        .index
-    )
+            df.groupby("StopLabel")["Delay at departure"]
+            .sum()
+            .div(60)
+            .sort_values(ascending=False)
+            .head(top_n)
+            .index
+        )
 
         df_top = df[df["StopLabel"].isin(top_stations)]
 
@@ -276,6 +296,15 @@ class DelayHeatmap:
         self.pivot_table = pivot
 
     def render_heatmap(self, title="Departure Delay Heatmap (Top 10 Stations by Total Delay)"):
+        """
+        Render a Plotly heatmap for departure delays.
+
+        Args:
+            title (str, optional): Title for the heatmap.
+
+        Returns:
+            plotly.graph_objs._figure.Figure: Plotly heatmap figure.
+        """
         if self.pivot_table is None:
             raise ValueError("Run filter_and_prepare_heatmap() first.")
 
@@ -294,6 +323,9 @@ class DelayHeatmap:
         return fig
 
     def load_and_prepare1(self):
+        """
+        Load and prepare data for arrival delay heatmap.
+        """
         df = pd.read_csv(self.delay_data_path)
 
         df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
@@ -315,7 +347,7 @@ class DelayHeatmap:
 
     def filter_and_prepare_heatmap1(self, station_filter=None, top_n=10):
         """
-        Filter and aggregate data for departure delay heatmap.
+        Filter and aggregate data for arrival delay heatmap.
 
         Args:
             station_filter (list, optional): List of station names to filter. Defaults to None.
@@ -330,7 +362,7 @@ class DelayHeatmap:
         top_stations = (
             df.groupby("StopLabel")["Delay at arrival"]
             .sum()
-            .div(60)  # Convert from seconds to minutes
+            .div(60)
             .sort_values(ascending=False)
             .head(top_n)
             .index
@@ -352,10 +384,10 @@ class DelayHeatmap:
 
     def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations by Total Delay)"):
         """
-        Render a Plotly heatmap for departure delays.
+        Render a Plotly heatmap for arrival delays.
 
         Args:
-            title (str, optional): Title for the heatmap. Defaults to "Departure Delay Heatmap (Top 10 Stations by Total Delay)".
+            title (str, optional): Title for the heatmap.
 
         Returns:
             plotly.graph_objs._figure.Figure: Plotly heatmap figure.
