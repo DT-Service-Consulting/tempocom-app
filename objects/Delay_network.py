@@ -220,180 +220,76 @@ class DelayBubbleMap2:
         return m
 
 
+
+
 class DelayHeatmap:
     """
     Generates heatmaps of delays (arrival or departure) by station and hour using Plotly.
+    Uses the same top stations (by arrival delay) as DelayBubbleMap.
     """
-    def __init__(self, delay_data_path):
-        """
-        Initialize DelayHeatmap with delay data CSV path.
-
-        Args:
-            delay_data_path (str): Path to delay data CSV file.
-        """
+    def __init__(self, delay_data_path: str, top_n: int = 10):
         self.delay_data_path = delay_data_path
-        self.df = None
+        self.df = pd.read_csv(delay_data_path)
+        self.top_n = top_n
+        self.top_stations = None
         self.pivot_table = None
+        self._prepare_common_fields()
 
-    def load_and_prepare(self):
-        """
-        Load and prepare data for departure delay heatmap.
-        """
-        df = pd.read_csv(self.delay_data_path)
+    def _prepare_common_fields(self):
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
 
-        df["Delay at departure"] = pd.to_numeric(df["Delay at departure"], errors="coerce")
-        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
-        df["Start Station (FR)"] = df["Start Station (FR)"].astype(str)
-        df["End Station (FR)"] = df["End Station (FR)"].astype(str)
-
-        df["Actual departure time"] = pd.to_datetime(df["Actual departure time"], errors="coerce")
-        df["Hour"] = df["Actual departure time"].dt.hour
-
-        df["StopLabel"] = (
-            df["Stopping place (FR)"].str.title() +
-            " (Start: " + df["Start Station (FR)"].str.title() +
-            " → End: " + df["End Station (FR)"].str.title() + ")"
-        )
-
-        df = df.dropna(subset=["Hour", "StopLabel", "Delay at departure"])
-        self.df = df
-
-    def filter_and_prepare_heatmap(self, station_filter=None, top_n=10):
-        """
-        Filter and aggregate data for departure delay heatmap.
-
-        Args:
-            station_filter (list, optional): List of station names to filter. Defaults to None.
-            top_n (int, optional): Number of top stations to include. Defaults to 10.
-        """
+    def _get_top_arrival_stations(self):
         df = self.df.copy()
-
-        if station_filter:
-            station_filter = [s.title() for s in station_filter]
-            df = df[df["Stopping place (FR)"].isin(station_filter)]
-
-        top_stations = (
-            df.groupby("StopLabel")["Delay at departure"]
-            .sum()
-            .div(60)
-            .sort_values(ascending=False)
-            .head(top_n)
-            .index
-        )
-
-        df_top = df[df["StopLabel"].isin(top_stations)]
-
-        heatmap_data = (
-            df_top.groupby(["StopLabel", "Hour"])["Delay at departure"]
-            .sum()
-            .reset_index()
-        )
-
-        pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at departure").fillna(0)
-        pivot["Total"] = pivot.sum(axis=1)
-        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total")
-
-        self.pivot_table = pivot
-
-    def render_heatmap(self, title="Departure Delay Heatmap (Top 10 Stations by Total Delay)"):
-        """
-        Render a Plotly heatmap for departure delays.
-
-        Args:
-            title (str, optional): Title for the heatmap.
-
-        Returns:
-            plotly.graph_objs._figure.Figure: Plotly heatmap figure.
-        """
-        if self.pivot_table is None:
-            raise ValueError("Run filter_and_prepare_heatmap() first.")
-
-        fig = px.imshow(
-            self.pivot_table,
-            labels=dict(x="Hour of Day", y="Station", color="Total Delay (min)"),
-            x=self.pivot_table.columns,
-            y=self.pivot_table.index,
-            aspect="auto",
-            color_continuous_scale="YlOrRd",
-            title=title
-        )
-
-        fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
-        fig.update_xaxes(type='category')
-        return fig
-
-    def load_and_prepare1(self):
-        """
-        Load and prepare data for arrival delay heatmap.
-        """
-        df = pd.read_csv(self.delay_data_path)
-
         df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
-        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
-        df["Start Station (FR)"] = df["Start Station (FR)"].astype(str)
-        df["End Station (FR)"] = df["End Station (FR)"].astype(str)
-
-        df["Actual arrival time"] = pd.to_datetime(df["Actual arrival time"], errors="coerce")
-        df["Hour"] = df["Actual arrival time"].dt.hour
-
-        df["StopLabel"] = (
-            df["Stopping place (FR)"].str.title() +
-            " (Start: " + df["Start Station (FR)"].str.title() +
-            " → End: " + df["End Station (FR)"].str.title() + ")"
-        )
-
-        df = df.dropna(subset=["Hour", "StopLabel", "Delay at arrival"])
-        self.df = df
-
-    def filter_and_prepare_heatmap1(self, station_filter=None, top_n=10):
-        """
-        Filter and aggregate data for arrival delay heatmap.
-
-        Args:
-            station_filter (list, optional): List of station names to filter. Defaults to None.
-            top_n (int, optional): Number of top stations to include. Defaults to 10.
-        """
-        df = self.df.copy()
-
-        if station_filter:
-            station_filter = [s.title() for s in station_filter]
-            df = df[df["Stopping place (FR)"].isin(station_filter)]
+        df = df[df["Delay at arrival"] > 0]
 
         top_stations = (
-            df.groupby("StopLabel")["Delay at arrival"]
+            df.groupby("Stopping place (FR)")["Delay at arrival"]
             .sum()
             .div(60)
             .sort_values(ascending=False)
-            .head(top_n)
+            .head(self.top_n)
             .index
+            .tolist()
         )
+        self.top_stations = top_stations
+        return top_stations
 
-        df_top = df[df["StopLabel"].isin(top_stations)]
+    def _prepare_heatmap_data(self, delay_type="departure"):
+        if self.top_stations is None:
+            self._get_top_arrival_stations()
 
-        heatmap_data = (
-            df_top.groupby(["StopLabel", "Hour"])["Delay at arrival"]
+        delay_col = "Delay at departure" if delay_type == "departure" else "Delay at arrival"
+        time_col = "Actual departure time" if delay_type == "departure" else "Actual arrival time"
+
+        df = self.df.copy()
+        df[delay_col] = pd.to_numeric(df[delay_col], errors="coerce")
+        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+        df["Hour"] = df[time_col].dt.hour
+        df = df.dropna(subset=["Hour", delay_col])
+        df = df[df[delay_col] > 0]
+        df = df[df["Stopping place (FR)"].isin(self.top_stations)]
+
+        grouped = (
+            df.groupby(["Stopping place (FR)", "Hour"])[delay_col]
             .sum()
+            .div(60)  # Convert to minutes ⏱️
             .reset_index()
         )
 
-        pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values="Delay at arrival").fillna(0)
+        pivot = grouped.pivot(index="Stopping place (FR)", columns="Hour", values=delay_col).fillna(0)
         pivot["Total"] = pivot.sum(axis=1)
         pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total")
 
         self.pivot_table = pivot
+        return pivot
 
-    def render_heatmap1(self, title="Arrival Delay Heatmap (Top 10 Stations by Total Delay)"):
-        """
-        Render a Plotly heatmap for arrival delays.
+    def render_heatmap(self, delay_type="departure"):
+        if delay_type not in ["departure", "arrival"]:
+            raise ValueError("delay_type must be 'departure' or 'arrival'")
 
-        Args:
-            title (str, optional): Title for the heatmap.
-
-        Returns:
-            plotly.graph_objs._figure.Figure: Plotly heatmap figure.
-        """
-        if self.pivot_table is None:
-            raise ValueError("Run filter_and_prepare_heatmap1() first.")
+        title = f"{delay_type.title()} Delay Heatmap (Top {self.top_n} Stations by Arrival Delay)"
+        self._prepare_heatmap_data(delay_type=delay_type)
 
         fig = px.imshow(
             self.pivot_table,
@@ -408,3 +304,4 @@ class DelayHeatmap:
         fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
         fig.update_xaxes(type='category')
         return fig
+
