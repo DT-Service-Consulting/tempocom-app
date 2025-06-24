@@ -27,8 +27,9 @@ Date: [2025-06-20]
 """
 
 
-
-
+import pandas as pd
+import plotly.express as px
+import warnings
 import pandas as pd
 import folium
 import ast
@@ -221,6 +222,8 @@ class DelayBubbleMap2:
 
 
 
+
+
 import pandas as pd
 import plotly.express as px
 import warnings
@@ -228,7 +231,7 @@ import warnings
 class DelayHeatmap:
     """
     Generates heatmaps of delays (arrival or departure) by station and hour using Plotly.
-    Uses the same top stations (by arrival delay) as DelayBubbleMap.
+    Supports optional filtering by station group (e.g., Brussels, Antwerp, Others).
     """
     def __init__(self, delay_data_path: str, top_n: int = 10):
         self.delay_data_path = delay_data_path
@@ -240,7 +243,7 @@ class DelayHeatmap:
 
     def _prepare_common_fields(self):
         self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
-        
+
     def _get_top_arrival_stations(self):
         df = self.df.copy()
         df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
@@ -259,10 +262,7 @@ class DelayHeatmap:
         return top_stations
 
     def _parse_datetime_column(self, df: pd.DataFrame, time_col: str) -> pd.Series:
-        # Step 1: parse with expected format
         parsed = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors='coerce')
-        
-        # Step 2: parse remaining with fallback while suppressing the warning
         mask = parsed.isna() & df[time_col].notna()
         if mask.any():
             with warnings.catch_warnings():
@@ -270,7 +270,7 @@ class DelayHeatmap:
                 parsed.loc[mask] = pd.to_datetime(df.loc[mask, time_col], errors='coerce')
         return parsed
 
-    def _prepare_heatmap_data(self, delay_type="departure"):
+    def _prepare_heatmap_data(self, delay_type="departure", station_filter=None):
         if self.top_stations is None:
             self._get_top_arrival_stations()
 
@@ -283,12 +283,15 @@ class DelayHeatmap:
         df["Hour"] = df[time_col].dt.hour
         df = df.dropna(subset=["Hour", delay_col])
         df = df[df[delay_col] > 0]
-        df = df[df["Stopping place (FR)"].isin(self.top_stations)]
+
+        # Filter by station group if specified
+        if station_filter is not None:
+            df = df[df["Stopping place (FR)"].isin(station_filter)]
 
         grouped = (
             df.groupby(["Stopping place (FR)", "Hour"])[delay_col]
             .sum()
-            .div(60)  # Convert seconds to minutes
+            .div(60)
             .reset_index()
         )
 
@@ -298,13 +301,12 @@ class DelayHeatmap:
 
         self.pivot_table = pivot
         return pivot
-
-    def render_heatmap(self, delay_type="departure"):
+    def render_heatmap(self, delay_type="departure", station_filter=None):
         if delay_type not in ["departure", "arrival"]:
             raise ValueError("delay_type must be 'departure' or 'arrival'")
 
-        title = f"{delay_type.title()} Delay Heatmap (Top {self.top_n} Stations by Arrival Delay)"
-        self._prepare_heatmap_data(delay_type=delay_type)
+        title = f"{delay_type.title()} Delay Heatmap (Filtered Stations)"
+        self._prepare_heatmap_data(delay_type=delay_type, station_filter=station_filter)
 
         fig = px.imshow(
             self.pivot_table,

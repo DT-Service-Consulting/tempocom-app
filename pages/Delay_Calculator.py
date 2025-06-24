@@ -13,17 +13,9 @@ Features:
 Environment Variables:
 - Expects 'MART_RELATIVE_PATH' to be set for locating data files.
 
-Dependencies:
-- streamlit
-- streamlit_folium
-- plotly
-- objects.Delay_network (custom module)
-
 Author: Mohamad Hussain
 Date: [2025-06-20]
 """
-
-
 
 import streamlit as st
 from streamlit_folium import st_folium
@@ -68,10 +60,8 @@ brussels_stations = [
 ]
 antwerp_stations = ['Anvers-Berchem', 'Anvers-Central', 'Malines']
 
-# Advanced Station Filter UI
+# Station group selector
 st.markdown("### 🎯 Station Filter")
-
-# Station group selection (mutually exclusive)
 station_group = st.radio(
     "Choose a station group to pre-select:",
     ["All", "Brussels", "Antwerp"],
@@ -79,32 +69,31 @@ station_group = st.radio(
     horizontal=True
 )
 
-# Determine initial selection based on checkboxes
+# Apply initial station group selection
 if station_group == "All":
     initial_selection = all_top_stations
 elif station_group == "Brussels":
     initial_selection = brussels_stations
 elif station_group == "Antwerp":
     initial_selection = antwerp_stations
-else:  # "None"
+else:
     initial_selection = []
 
-
-# Filter to only valid stations
+# Intersect with actual available stations
 initial_selection = sorted(set(initial_selection).intersection(set(all_top_stations)))
 
-# Multi-select dropdown
+# Multiselect UI
 selected_stations = st.multiselect(
     "Manually add/remove stations:",
     options=all_top_stations,
     default=initial_selection
 )
 
-# Apply selected station filters
+# Apply selected station filters to maps
 bubble_map.prepare_data(station_filter=selected_stations)
 bubble_map1.prepare_data1(station_filter=selected_stations)
 
-# Render Bubble Maps
+# Bubble Maps
 st.markdown("### 📍 Delay Bubble Maps")
 col1, col2 = st.columns(2)
 
@@ -118,7 +107,7 @@ with col2:
     m_arrival = bubble_map.render_map()
     st_folium(m_arrival, width=700, height=500)
 
-# Delay Heatmaps
+# Heatmaps
 st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
 
 heatmap = DelayHeatmap(
@@ -130,10 +119,10 @@ col3, col4 = st.columns(2)
 
 with col3:
     st.markdown("#### Departure Delays")
-    fig_dep = heatmap.render_heatmap(delay_type="departure")
+    fig_dep = heatmap.render_heatmap(delay_type="departure", station_filter=selected_stations)
     st.plotly_chart(fig_dep)
 
 with col4:
     st.markdown("#### Arrival Delays")
-    fig_arr = heatmap.render_heatmap(delay_type="arrival")
+    fig_arr = heatmap.render_heatmap(delay_type="arrival", station_filter=selected_stations)
     st.plotly_chart(fig_arr)
