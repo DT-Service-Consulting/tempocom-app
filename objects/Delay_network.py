@@ -221,6 +221,9 @@ class DelayBubbleMap2:
 
 
 
+import pandas as pd
+import plotly.express as px
+import warnings
 
 class DelayHeatmap:
     """
@@ -237,7 +240,7 @@ class DelayHeatmap:
 
     def _prepare_common_fields(self):
         self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
-
+        
     def _get_top_arrival_stations(self):
         df = self.df.copy()
         df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
@@ -255,6 +258,18 @@ class DelayHeatmap:
         self.top_stations = top_stations
         return top_stations
 
+    def _parse_datetime_column(self, df: pd.DataFrame, time_col: str) -> pd.Series:
+        # Step 1: parse with expected format
+        parsed = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors='coerce')
+        
+        # Step 2: parse remaining with fallback while suppressing the warning
+        mask = parsed.isna() & df[time_col].notna()
+        if mask.any():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                parsed.loc[mask] = pd.to_datetime(df.loc[mask, time_col], errors='coerce')
+        return parsed
+
     def _prepare_heatmap_data(self, delay_type="departure"):
         if self.top_stations is None:
             self._get_top_arrival_stations()
@@ -264,7 +279,7 @@ class DelayHeatmap:
 
         df = self.df.copy()
         df[delay_col] = pd.to_numeric(df[delay_col], errors="coerce")
-        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+        df[time_col] = self._parse_datetime_column(df, time_col)
         df["Hour"] = df[time_col].dt.hour
         df = df.dropna(subset=["Hour", delay_col])
         df = df[df[delay_col] > 0]
@@ -273,7 +288,7 @@ class DelayHeatmap:
         grouped = (
             df.groupby(["Stopping place (FR)", "Hour"])[delay_col]
             .sum()
-            .div(60)  # Convert to minutes ⏱️
+            .div(60)  # Convert seconds to minutes
             .reset_index()
         )
 
@@ -304,4 +319,3 @@ class DelayHeatmap:
         fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
         fig.update_xaxes(type='category')
         return fig
-
