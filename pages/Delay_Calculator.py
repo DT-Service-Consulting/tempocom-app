@@ -27,9 +27,10 @@ Date: [2025-06-20]
 
 import streamlit as st
 from streamlit_folium import st_folium
-from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2
-from objects.Delay_network import DelayHeatmap
+from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2, DelayHeatmap
 import os
+
+# Set Streamlit page layout
 st.set_page_config(layout="wide")
 st.title("⏱️ Delay Visualization Dashboard")
 
@@ -57,20 +58,53 @@ bubble_map1 = load_map1()
 bubble_map1.prepare_data1()
 stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
 
+# Combine and deduplicate stations
 all_top_stations = sorted(set(stations_arrival + stations_departure))
 
-# UI: Multi-select
-selected_stations = st.multiselect(
-    "Filter stations shown on the map:",
-    options=all_top_stations,
-    default=all_top_stations
+# Define station clusters
+brussels_stations = [
+    'Bruxelles-Central', 'Bruxelles-Congrès', 'Bruxelles-Chapelle',
+    'Bruxelles-Midi', 'Bruxelles-Nord', 'Schaerbeek', 'Hal'
+]
+antwerp_stations = ['Anvers-Berchem', 'Anvers-Central', 'Malines']
+
+# Advanced Station Filter UI
+st.markdown("### 🎯 Station Filter")
+
+# Station group selection (mutually exclusive)
+station_group = st.radio(
+    "Choose a station group to pre-select:",
+    ["All", "Brussels", "Antwerp"],
+    index=0,
+    horizontal=True
 )
 
-# Apply filters
+# Determine initial selection based on checkboxes
+if station_group == "All":
+    initial_selection = all_top_stations
+elif station_group == "Brussels":
+    initial_selection = brussels_stations
+elif station_group == "Antwerp":
+    initial_selection = antwerp_stations
+else:  # "None"
+    initial_selection = []
+
+
+# Filter to only valid stations
+initial_selection = sorted(set(initial_selection).intersection(set(all_top_stations)))
+
+# Multi-select dropdown
+selected_stations = st.multiselect(
+    "Manually add/remove stations:",
+    options=all_top_stations,
+    default=initial_selection
+)
+
+# Apply selected station filters
 bubble_map.prepare_data(station_filter=selected_stations)
 bubble_map1.prepare_data1(station_filter=selected_stations)
 
-# Render side-by-side bubble maps
+# Render Bubble Maps
 st.markdown("### 📍 Delay Bubble Maps")
 col1, col2 = st.columns(2)
 
@@ -84,10 +118,9 @@ with col2:
     m_arrival = bubble_map.render_map()
     st_folium(m_arrival, width=700, height=500)
 
-# Delay heatmaps side-by-side
+# Delay Heatmaps
 st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
 
-# Initialize heatmap instance
 heatmap = DelayHeatmap(
     delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv",
     top_n=10
