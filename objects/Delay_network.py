@@ -224,9 +224,6 @@ class DelayBubbleMap2:
 
 
 
-import pandas as pd
-import plotly.express as px
-import warnings
 
 class DelayHeatmap:
     """
