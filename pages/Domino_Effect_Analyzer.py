@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_folium import st_folium
-from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2
+from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2 ,DelayLineChart
 from objects.Delay_network import DelayHeatmap
 from components import *
 
@@ -36,23 +36,10 @@ all_top_stations = sorted(set(stations_arrival + stations_departure))
 
 # Define station clusters
 brussels_stations = [
-    "Bruxelles-Central", "Bruxelles-Congrès", "Bruxelles-Chapelle",
-    "Bruxelles-Midi", "Bruxelles-Nord", "Bruxelles-Schuman",
-    "Bruxelles-Luxembourg", "Bruxelles-Ouest", "Schaerbeek", "Etterbeek",
-    "Watermael", "Germoir", "Delta", "Meiser", "Bockstael", "Simonis",
-    "Haren", "Haren-Sud", "Zaventem", "Nossegem", "Vilvorde", "Forest-Est",
-    "Forest-Midi", "Uccle-Stalle", "Uccle-Calevoet", "Linkebeek", "Holleken",
-    "Anderlecht", "Jette", "Berchem-Sainte-Agathe", "Boondael"
+    'Bruxelles-Central', 'Bruxelles-Congrès', 'Bruxelles-Chapelle',
+    'Bruxelles-Midi', 'Bruxelles-Nord', 'Schaerbeek', 'Hal'
 ]
-antwerp_stations = [
-    "Anvers-Central", "Anvers-Berchem", "Anvers-Noorderdokken",
-    "Anvers-Luchtbal", "Anvers-Est", "Anvers-Haven", "Anvers-Dam",
-    "Ekeren", "Hoboken-Polder", "Mortsel", "Mortsel-Liersesteenweg",
-    "Mortsel-Oude God", "Duffel", "Lierre", "Kontich-Lint", "Boechout",
-    "Nijlen", "Noorderkempen", "Sint-Mariaburg", "Hemiksem", "Kalmthout",
-    "Kapellen"
-]
-
+antwerp_stations = ['Anvers-Berchem', 'Anvers-Central', 'Malines']
 
 # Station group selector
 st.markdown("### 🎯 Station Filter")
@@ -120,3 +107,17 @@ with col4:
     st.markdown("#### Arrival Delays")
     fig_arr = heatmap.render_heatmap(delay_type="arrival", station_filter=selected_stations)
     st.plotly_chart(fig_arr)
+
+# ✅ NEW SECTION: Delay Line Chart
+st.markdown("### 📈 Delay Trends Over Time")
+
+line_chart = DelayLineChart(
+    delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
+)
+
+fig_line = line_chart.render_line_chart(
+    station_filter=selected_stations,
+    time_unit="hour"  # Can also be "date"
+)
+
+st.plotly_chart(fig_line, use_container_width=True)
