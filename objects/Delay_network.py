@@ -35,7 +35,7 @@ import folium
 import ast
 import matplotlib.pyplot as plt
 import seaborn as sns
-import plotly.express as px
+import plotly.graph_objects as go
 
 class DelayBubbleMap:
     """
@@ -317,4 +317,96 @@ class DelayHeatmap:
 
         fig.update_layout(margin=dict(t=50, l=100, r=20, b=50))
         fig.update_xaxes(type='category')
+        return fig
+    
+
+
+
+
+
+class DelayLineChart:
+    """
+    Draws a line chart showing average departure and arrival delays over time,
+    filtered by selected stations.
+    """
+
+    def __init__(self, delay_data_path: str):
+        self.df = pd.read_csv(delay_data_path)
+        self._prepare_common_fields()
+
+    def _prepare_common_fields(self):
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.strip().str.title()
+        self.df["Actual departure time"] = self._parse_datetime_column(self.df, "Actual departure time")
+        self.df["Actual arrival time"] = self._parse_datetime_column(self.df, "Actual arrival time")
+        self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce")
+        self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce")
+
+    def _parse_datetime_column(self, df: pd.DataFrame, time_col: str) -> pd.Series:
+        parsed = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+        mask = parsed.isna() & df[time_col].notna()
+        if mask.any():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                parsed.loc[mask] = pd.to_datetime(df.loc[mask, time_col], errors="coerce")
+        return parsed
+
+    def _aggregate_delays(self, station_filter=None, time_unit="hour"):
+        df = self.df.copy()
+
+        if station_filter:
+            df = df[df["Stopping place (FR)"].isin(station_filter)]
+
+        if time_unit == "hour":
+            df["Hour"] = df["Actual departure time"].dt.hour
+        elif time_unit == "date":
+            df["Hour"] = df["Actual departure time"].dt.date
+        else:
+            raise ValueError("time_unit must be 'hour' or 'date'")
+
+        agg = df.groupby("Hour").agg({
+            "Delay at departure": "mean",
+            "Delay at arrival": "mean"
+        }).dropna()
+
+        return agg
+
+    def render_line_chart(self, station_filter=None, time_unit="hour"):
+        agg = self._aggregate_delays(station_filter=station_filter, time_unit=time_unit)
+
+        fig = go.Figure()
+
+        # Departure Delay in Gold
+        fig.add_trace(go.Scatter(
+            x=agg.index, y=agg["Delay at departure"],
+            mode='lines+markers',
+            name='Departure Delay (min)',
+            line=dict(color='gold', width=2),
+            marker=dict(color='gold')
+        ))
+
+        # Arrival Delay in Orange
+        fig.add_trace(go.Scatter(
+            x=agg.index, y=agg["Delay at arrival"],
+            mode='lines+markers',
+            name='Arrival Delay (min)',
+            line=dict(color='red', width=2),
+            marker=dict(color='red')
+        ))
+
+        fig.update_layout(
+            title="📈 Average Delays per Hour (Selected Stations)",
+            xaxis_title="Hour of Day" if time_unit == "hour" else "Date",
+            yaxis_title="Delay (minutes)",
+            xaxis=dict(
+                type="category" if time_unit == "hour" else "linear",
+                tickmode='linear',
+                dtick=1,
+                tick0=0,
+                tickangle=0
+            ),
+            legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.5)"),
+            margin=dict(t=50, l=50, r=50, b=50),
+            height=450
+        )
+
         return fig
