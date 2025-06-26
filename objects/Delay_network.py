@@ -410,3 +410,88 @@ class DelayLineChart:
         )
 
         return fig
+
+
+
+
+
+class DelayHourlyTotalLineChart:
+    def __init__(self, delay_data_path: str):
+        self.df = pd.read_csv(delay_data_path)
+        self._prepare_data()
+
+    def _prepare_data(self):
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.strip().str.title()
+        self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce")
+        self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce")
+        self.df["Total Delay"] = self.df["Delay at departure"].fillna(0) + self.df["Delay at arrival"].fillna(0)
+
+        # Combine time fields
+        self.df["Hour"] = self.df["Actual departure time"].combine_first(self.df["Actual arrival time"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            self.df["Hour"] = pd.to_datetime(self.df["Hour"], errors="coerce").dt.hour
+
+        self.df = self.df[self.df["Total Delay"] > 0]
+
+    def plot(self, selected_stations=None, return_data=False):
+        df = self.df.copy()
+        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str).str.title()
+        df["Delay at departure"] = pd.to_numeric(df["Delay at departure"], errors="coerce")
+        df["Delay at arrival"] = pd.to_numeric(df["Delay at arrival"], errors="coerce")
+
+        # Combine delay columns
+        df["Total Delay"] = df["Delay at departure"].fillna(0) + df["Delay at arrival"].fillna(0)
+        df = df[df["Total Delay"] > 0]
+
+        # Apply filter
+        if selected_stations:
+            df = df[df["Stopping place (FR)"].isin(selected_stations)]
+
+        # Extract hour from combined time
+        df["Hour"] = df["Actual departure time"].combine_first(df["Actual arrival time"])
+        df["Hour"] = pd.to_datetime(df["Hour"], errors="coerce").dt.hour
+        df = df.dropna(subset=["Hour"])
+
+        # Group by station and hour
+        grouped = (
+            df.groupby(["Stopping place (FR)", "Hour"])["Total Delay"]
+            .sum()
+            .div(60)
+            .reset_index()
+            .rename(columns={"Total Delay": "Total Delay (min)"})
+        )
+
+        if grouped.empty:
+            return (None, grouped) if return_data else None
+
+        # Plot
+        import plotly.express as px
+        fig = px.line(
+            grouped,
+            x="Hour",
+            y="Total Delay (min)",
+            color="Stopping place (FR)",
+            markers=True,
+            title="⏳ Hourly Total Delay by Station"
+        )
+
+        # Highlight max point per line
+        max_points = grouped.loc[grouped.groupby("Stopping place (FR)")["Total Delay (min)"].idxmax()]
+        fig.add_trace(px.scatter(
+            max_points,
+            x="Hour",
+            y="Total Delay (min)",
+            color_discrete_sequence=["red"],
+            hover_name="Stopping place (FR)",
+            hover_data=["Total Delay (min)"]
+        ).data[0])
+
+        fig.update_layout(
+            xaxis=dict(title="Hour of Day", dtick=1),
+            yaxis_title="Delay (minutes)",
+            height=450,
+            legend_title="Station"
+        )
+
+        return (fig, grouped) if return_data else fig

@@ -1,155 +1,78 @@
 """
 Delay_Calculator.py
 
-Streamlit dashboard for visualizing train delay data using interactive maps and heatmaps.
-
-Features:
-- Loads and caches delay data for efficient visualization.
-- Displays side-by-side bubble maps for departure and arrival delays at train stations.
-- Allows users to filter stations shown on the maps via a multi-select widget.
-- Shows heatmaps of delays for the top 10 stations (departure and arrival) using Plotly.
-- Utilizes custom DelayBubbleMap, DelayBubbleMap2, and DelayHeatmap classes for data processing and visualization.
-
-Environment Variables:
-- Expects 'MART_RELATIVE_PATH' to be set for locating data files.
+Streamlit dashboard for visualizing total delay by hour for selected stations.
 
 Author: Mohamad Hussain
-Date: [2025-06-20]
+Date: [2025-06-26]
 """
 
 import streamlit as st
-from streamlit_folium import st_folium
-from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2, DelayHeatmap, DelayLineChart
-
+import pandas as pd
 import os
+from objects.Delay_network import DelayHourlyTotalLineChart
 
-# Set Streamlit page layout
+# Setup page
 st.set_page_config(layout="wide")
-st.title("⏱️ Delay Visualization Dashboard")
+st.title("📊 Total Delay by Hour Dashboard")
 
-# Load maps using cache
-@st.cache_resource
-def load_map():
-    return DelayBubbleMap(
-        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-    )
+# Load delay data
+DATA_PATH = f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
+df_delay = pd.read_csv(DATA_PATH)
 
-@st.cache_resource
-def load_map1():
-    return DelayBubbleMap2(
-        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-    )
+# Get all unique stations
+df_delay["Stopping place (FR)"] = df_delay["Stopping place (FR)"].astype(str).str.title()
+all_stations = sorted(df_delay["Stopping place (FR)"].dropna().unique())
 
-# Prepare data
-bubble_map = load_map()
-bubble_map.prepare_data()
-stations_arrival = bubble_map.delay_summary['Stopping place (FR)'].tolist()
-
-bubble_map1 = load_map1()
-bubble_map1.prepare_data1()
-stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
-
-# Combine and deduplicate stations
-all_top_stations = sorted(set(stations_arrival + stations_departure))
-
-# Define station clusters
-brussels_stations = [
-    "Bruxelles-Central", "Bruxelles-Congrès", "Bruxelles-Chapelle",
-    "Bruxelles-Midi", "Bruxelles-Nord", "Bruxelles-Schuman",
-    "Bruxelles-Luxembourg", "Bruxelles-Ouest", "Schaerbeek", "Etterbeek",
-    "Watermael", "Germoir", "Delta", "Meiser", "Bockstael", "Simonis",
-    "Haren", "Haren-Sud", "Zaventem", "Nossegem", "Vilvorde", "Forest-Est",
-    "Forest-Midi", "Uccle-Stalle", "Uccle-Calevoet", "Linkebeek", "Holleken",
-    "Anderlecht", "Jette", "Berchem-Sainte-Agathe", "Boondael"
-]
-
-antwerp_stations = [
-    "Anvers-Central", "Anvers-Berchem", "Anvers-Noorderdokken",
-    "Anvers-Luchtbal", "Anvers-Est", "Anvers-Haven", "Anvers-Dam",
-    "Ekeren", "Hoboken-Polder", "Mortsel", "Mortsel-Liersesteenweg",
-    "Mortsel-Oude God", "Duffel", "Lierre", "Kontich-Lint", "Boechout",
-    "Nijlen", "Noorderkempen", "Sint-Mariaburg", "Hemiksem", "Kalmthout",
-    "Kapellen"
-]
-# Station group selector
-st.markdown("### 🎯 Station Filter")
-station_group = st.radio(
-    "Choose a station group to pre-select:",
-    ["All", "Brussels", "Antwerp"],
-    index=0,
-    horizontal=True
-)
-
-# Apply initial station group selection
-if station_group == "All":
-    initial_selection = all_top_stations
-elif station_group == "Brussels":
-    initial_selection = brussels_stations
-elif station_group == "Antwerp":
-    initial_selection = antwerp_stations
-else:
-    initial_selection = []
-
-# Intersect with actual available stations
-initial_selection = sorted(set(initial_selection).intersection(set(all_top_stations)))
-
-# Multiselect UI
+# Station selector
 selected_stations = st.multiselect(
-    "Manually add/remove stations:",
-    options=all_top_stations,
-    default=initial_selection
+    "🎯 Select station(s) to visualize total delay by hour:",
+    options=all_stations,
+    default=["Bruxelles-Midi"]
 )
 
-# Apply selected station filters to maps
-bubble_map.prepare_data(station_filter=selected_stations)
-bubble_map1.prepare_data1(station_filter=selected_stations)
+# If user selected any stations
+if selected_stations:
+    # Filter data
+    df_filtered = df_delay[df_delay["Stopping place (FR)"].isin(selected_stations)].copy()
 
-# Bubble Maps
-st.markdown("### 📍 Delay Bubble Maps")
-col1, col2 = st.columns(2)
+    # Calculate total delay (arrival + departure)
+    df_filtered["Total Delay"] = df_filtered["Delay at departure"].fillna(0) + df_filtered["Delay at arrival"].fillna(0)
+    df_filtered = df_filtered[df_filtered["Total Delay"] > 0]
 
-with col1:
-    st.markdown("#### Departure Delays")
-    m_departure = bubble_map1.render_map1()
-    st_folium(m_departure, width=700, height=500)
+    # Create hour column from first valid timestamp
+    df_filtered["Hour"] = df_filtered["Actual departure time"].combine_first(df_filtered["Actual arrival time"])
+    df_filtered["Hour"] = pd.to_datetime(df_filtered["Hour"], errors="coerce").dt.hour
 
-with col2:
-    st.markdown("#### Arrival Delays")
-    m_arrival = bubble_map.render_map()
-    st_folium(m_arrival, width=700, height=500)
+    # Group by station and hour
+    hourly_totals = (
+        df_filtered.groupby(["Stopping place (FR)", "Hour"])["Total Delay"]
+        .sum()
+        .div(60)  # convert to minutes
+        .reset_index()
+        .rename(columns={"Total Delay": "Total Delay (min)"})
+    )
 
-# Heatmaps
-st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
+    # Stats from grouped data
+    total_delay = round(hourly_totals["Total Delay (min)"].sum(), 1)
+    avg_delay = round(hourly_totals["Total Delay (min)"].mean(), 1)
+    max_delay = round(hourly_totals["Total Delay (min)"].max(), 1)
+    count = len(hourly_totals)
 
-heatmap = DelayHeatmap(
-    delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv",
-    top_n=10
-)
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("🕒 Total Delay (min)", f"{total_delay}")
+    col2.metric("📈 Average Delay (min)", f"{avg_delay}")
+    col3.metric("🚨 Max Delay (min)", f"{max_delay}")
+    col4.metric("🧾 Hourly Records", f"{count}")
 
-col3, col4 = st.columns(2)
+    # Draw chart using class
+    chart = DelayHourlyTotalLineChart(delay_data_path=DATA_PATH)
+    fig = chart.plot(selected_stations=selected_stations)
 
-with col3:
-    st.markdown("#### Departure Delays")
-    fig_dep = heatmap.render_heatmap(delay_type="departure", station_filter=selected_stations)
-    st.plotly_chart(fig_dep)
-
-with col4:
-    st.markdown("#### Arrival Delays")
-    fig_arr = heatmap.render_heatmap(delay_type="arrival", station_filter=selected_stations)
-    st.plotly_chart(fig_arr)
-
-# ✅ NEW SECTION: Delay Line Chart
-st.markdown("### 📈 Delay Trends Over Time")
-
-line_chart = DelayLineChart(
-    delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-)
-
-fig_line = line_chart.render_line_chart(
-    station_filter=selected_stations,
-    time_unit="hour"  # Can also be "date"
-)
-
-st.plotly_chart(fig_line, use_container_width=True)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No delay data available for the selected stations.")
+else:
+    st.info("Please select at least one station to view delay data.")
