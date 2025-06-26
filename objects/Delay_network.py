@@ -495,3 +495,70 @@ class DelayHourlyTotalLineChart:
         )
 
         return (fig, grouped) if return_data else fig
+
+
+
+
+
+
+class DelayHourlyTotalLineChartByTrain:
+    def __init__(self, delay_data_path: str):
+        self.df = pd.read_csv(delay_data_path)
+        self._prepare_fields()
+
+    def _prepare_fields(self):
+        self.df["Train number"] = self.df["Train number"].astype(str)
+        self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce")
+        self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce")
+        self.df["Total Delay"] = self.df["Delay at departure"].fillna(0) + self.df["Delay at arrival"].fillna(0)
+
+        self.df["Hour"] = self.df["Actual departure time"].combine_first(self.df["Actual arrival time"])
+        self.df["Hour"] = pd.to_datetime(self.df["Hour"], errors="coerce").dt.hour
+
+    def plot(self, selected_trains=None, return_data=False):
+        df = self.df.copy()
+        df = df[df["Total Delay"] > 0]
+        df = df.dropna(subset=["Hour"])
+
+        if selected_trains:
+            df = df[df["Train number"].isin(selected_trains)]
+
+        grouped = (
+            df.groupby(["Train number", "Hour"])["Total Delay"]
+            .sum()
+            .div(60)
+            .reset_index()
+            .rename(columns={"Total Delay": "Total Delay (min)"})
+        )
+
+        if grouped.empty:
+            return (None, grouped) if return_data else None
+
+        import plotly.express as px
+        fig = px.line(
+            grouped,
+            x="Hour",
+            y="Total Delay (min)",
+            color="Train number",
+            markers=True,
+            title="⏳ Hourly Total Delay by Train Number"
+        )
+
+        max_points = grouped.loc[grouped.groupby("Train number")["Total Delay (min)"].idxmax()]
+        fig.add_trace(px.scatter(
+            max_points,
+            x="Hour",
+            y="Total Delay (min)",
+            color_discrete_sequence=["red"],
+            hover_name="Train number",
+            hover_data=["Total Delay (min)"]
+        ).data[0])
+
+        fig.update_layout(
+            xaxis=dict(title="Hour of Day", dtick=1),
+            yaxis_title="Delay (minutes)",
+            height=450,
+            legend_title="Train Number"
+        )
+
+        return (fig, grouped) if return_data else fig
