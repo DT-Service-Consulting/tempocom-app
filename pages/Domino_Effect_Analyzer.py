@@ -36,11 +36,23 @@ all_top_stations = sorted(set(stations_arrival + stations_departure))
 
 # Define station clusters
 brussels_stations = [
-    'Bruxelles-Central', 'Bruxelles-Congrès', 'Bruxelles-Chapelle',
-    'Bruxelles-Midi', 'Bruxelles-Nord', 'Schaerbeek', 'Hal'
+    "Bruxelles-Central", "Bruxelles-Congrès", "Bruxelles-Chapelle",
+    "Bruxelles-Midi", "Bruxelles-Nord", "Bruxelles-Schuman",
+    "Bruxelles-Luxembourg", "Bruxelles-Ouest", "Schaerbeek", "Etterbeek",
+    "Watermael", "Germoir", "Delta", "Meiser", "Bockstael", "Simonis",
+    "Haren", "Haren-Sud", "Zaventem", "Nossegem", "Vilvorde", "Forest-Est",
+    "Forest-Midi", "Uccle-Stalle", "Uccle-Calevoet", "Linkebeek", "Holleken",
+    "Anderlecht", "Jette", "Berchem-Sainte-Agathe", "Boondael"
 ]
-antwerp_stations = ['Anvers-Berchem', 'Anvers-Central', 'Malines']
 
+antwerp_stations = [
+    "Anvers-Central", "Anvers-Berchem", "Anvers-Noorderdokken",
+    "Anvers-Luchtbal", "Anvers-Est", "Anvers-Haven", "Anvers-Dam",
+    "Ekeren", "Hoboken-Polder", "Mortsel", "Mortsel-Liersesteenweg",
+    "Mortsel-Oude God", "Duffel", "Lierre", "Kontich-Lint", "Boechout",
+    "Nijlen", "Noorderkempen", "Sint-Mariaburg", "Hemiksem", "Kalmthout",
+    "Kapellen"
+]
 # Station group selector
 st.markdown("### 🎯 Station Filter")
 station_group = st.radio(
