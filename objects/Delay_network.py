@@ -522,7 +522,8 @@ class DelayHourlyTotalLineChartByTrain:
 
         if selected_trains:
             df = df[df["Train number"].isin(selected_trains)]
-
+        
+        # Sum delay per hour per train number
         grouped = (
             df.groupby(["Train number", "Hour"])["Total Delay"]
             .sum()
@@ -531,12 +532,23 @@ class DelayHourlyTotalLineChartByTrain:
             .rename(columns={"Total Delay": "Total Delay (min)"})
         )
 
-        if grouped.empty:
-            return (None, grouped) if return_data else None
+        # Ensure full 24-hour coverage
+        all_hours = pd.DataFrame({'Hour': list(range(24))})
+        full_data = []
+        for train in grouped["Train number"].unique():
+            train_data = grouped[grouped["Train number"] == train].merge(all_hours, on="Hour", how="right")
+            train_data["Train number"] = train
+            train_data["Total Delay (min)"] = train_data["Total Delay (min)"].fillna(0)
+            full_data.append(train_data)
+        
+        grouped_full = pd.concat(full_data, ignore_index=True)
+
+        if grouped_full.empty:
+            return (None, grouped_full) if return_data else None
 
         import plotly.express as px
         fig = px.line(
-            grouped,
+            grouped_full,
             x="Hour",
             y="Total Delay (min)",
             color="Train number",
@@ -544,7 +556,8 @@ class DelayHourlyTotalLineChartByTrain:
             title="⏳ Hourly Total Delay by Train Number"
         )
 
-        max_points = grouped.loc[grouped.groupby("Train number")["Total Delay (min)"].idxmax()]
+        # Max points (after ensuring 24h coverage)
+        max_points = grouped_full.loc[grouped_full.groupby("Train number")["Total Delay (min)"].idxmax()]
         fig.add_trace(px.scatter(
             max_points,
             x="Hour",
@@ -555,13 +568,14 @@ class DelayHourlyTotalLineChartByTrain:
         ).data[0])
 
         fig.update_layout(
-            xaxis=dict(title="Hour of Day", dtick=1),
+            xaxis=dict(title="Hour of Day", tickmode="linear", dtick=1, range=[0, 23]),
             yaxis_title="Delay (minutes)",
             height=450,
             legend_title="Train Number"
         )
 
-        return (fig, grouped) if return_data else fig
+        return (fig, grouped_full) if return_data else fig
+
 
 
 class DelayHourlyLinkTotalLineChart:

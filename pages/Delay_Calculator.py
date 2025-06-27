@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from objects.Delay_network import DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain
+from objects.Delay_network import DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain,DelayHourlyLinkTotalLineChart
 
 # Setup page
 st.set_page_config(layout="wide")
@@ -9,7 +9,7 @@ st.title("📊 Total Delay by Hour Dashboard")
 
 # Paths to data
 DATA_PATH = f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-TRAIN_DATA_PATH = f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv.gz"
+TRAIN_DATA_PATH = f"{os.getenv('MART_RELATIVE_PATH')}/public/cleaned_daily_full.csv"
 
 # Load station delay data
 df_delay = pd.read_csv(DATA_PATH)
@@ -107,3 +107,44 @@ if selected_trains:
         st.plotly_chart(fig_train, use_container_width=True)
     else:
         st.warning("No delay data for selected train numbers.")
+
+
+# === Relation Direction Section ===
+
+st.markdown("## 🔁 Total Delay by Hour (Relation Direction)")
+
+RELATION_PATH = f"{os.getenv('MART_RELATIVE_PATH')}/public/cleaned_daily_full.csv"
+relation_chart = DelayHourlyLinkTotalLineChart(delay_data_path=RELATION_PATH)
+
+# Load all unique directions
+all_relations = sorted(relation_chart.df["Relation direction"].dropna().unique().tolist())
+
+# UI filter
+selected_relations = st.multiselect(
+    "🧭 Select Relation Direction(s):",
+    options=all_relations,
+    default=all_relations[:3]  # or [] if you want it empty by default
+)
+
+# Plot and Stats
+if selected_relations:
+    fig_relation, grouped_relation = relation_chart.plot_by_relation_direction(
+        selected_relations=selected_relations,
+        return_data=True
+    )
+
+    # Calculate metrics
+    total_delay_rel = round(grouped_relation["Total Delay"].sum(), 1)
+    avg_delay_rel = round(grouped_relation["Total Delay"].mean(), 1)
+    max_delay_rel = round(grouped_relation["Total Delay"].max(), 1)
+    count_rel = len(grouped_relation)
+
+    colr1, colr2, colr3, colr4 = st.columns(4)
+    colr1.metric("🕒 Total Delay (min)", f"{total_delay_rel}")
+    colr2.metric("📈 Average Delay (min)", f"{avg_delay_rel}")
+    colr3.metric("🚨 Max Delay (min)", f"{max_delay_rel}")
+    colr4.metric("🧾 Hourly Records", f"{count_rel}")
+
+    st.plotly_chart(fig_relation, use_container_width=True)
+else:
+    st.warning("Please select at least one relation direction to display the chart.")
