@@ -12,3 +12,4 @@ pretty-errors
 python-dotenv
 plotly.express
 warnings
+ipywidgets
