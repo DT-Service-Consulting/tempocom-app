@@ -562,3 +562,84 @@ class DelayHourlyTotalLineChartByTrain:
         )
 
         return (fig, grouped) if return_data else fig
+
+
+class DelayHourlyLinkTotalLineChart:
+    def __init__(self, delay_data_path: str):
+        self.df = pd.read_csv(delay_data_path)
+        self._prepare_common_fields()
+
+    def _prepare_common_fields(self):
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
+        self.df["Train number"] = self.df["Train number"].astype(str)
+        self.df["Relation direction"] = self.df["Relation direction"].astype(str)
+        self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce")
+        self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce")
+        self.df["Actual departure time"] = self._parse_datetime_column(self.df, "Actual departure time")
+        self.df["Actual arrival time"] = self._parse_datetime_column(self.df, "Actual arrival time")
+
+    def _parse_datetime_column(self, df: pd.DataFrame, time_col: str) -> pd.Series:
+        parsed = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+        mask = parsed.isna() & df[time_col].notna()
+        if mask.any():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                parsed.loc[mask] = pd.to_datetime(df.loc[mask, time_col], errors="coerce")
+        return parsed
+
+    def _group_by_hour(self, df: pd.DataFrame, group_col: str):
+        df["Total Delay"] = df["Delay at departure"].fillna(0) + df["Delay at arrival"].fillna(0)
+        df = df[df["Total Delay"] > 0]
+        df["Hour"] = df["Actual departure time"].combine_first(df["Actual arrival time"]).dt.hour
+        grouped = df.groupby([group_col, "Hour"])["Total Delay"].sum().div(60).reset_index()
+        return grouped
+
+    def _plot_grouped(self, grouped: pd.DataFrame, group_col: str):
+        if grouped.empty:
+            return None
+        fig = go.Figure()
+        for group in grouped[group_col].unique():
+            df_group = grouped[grouped[group_col] == group]
+            max_val = df_group["Total Delay"].max()
+            fig.add_trace(go.Scatter(
+                x=df_group["Hour"],
+                y=df_group["Total Delay"],
+                mode="lines+markers+text",
+                name=group,
+                line=dict(width=2),
+                text=[f"⬆️ {val:.1f}" if val == max_val else "" for val in df_group["Total Delay"]],
+                textposition="top center"
+            ))
+        fig.update_layout(
+            title=f"Total Delay by Hour per {group_col}",
+            xaxis_title="Hour of Day",
+            yaxis_title="Total Delay (min)",
+            xaxis=dict(dtick=1),
+            height=500,
+            legend_title=group_col
+        )
+        return fig
+
+    def plot(self, selected_stations=None, return_data=False):
+        df = self.df.copy()
+        if selected_stations:
+            df = df[df["Stopping place (FR)"].isin(selected_stations)]
+        grouped = self._group_by_hour(df, "Stopping place (FR)")
+        fig = self._plot_grouped(grouped, "Stopping place (FR)")
+        return (fig, grouped) if return_data else fig
+
+    def plot_by_train_number(self, selected_trains=None, return_data=False):
+        df = self.df.copy()
+        if selected_trains:
+            df = df[df["Train number"].isin(selected_trains)]
+        grouped = self._group_by_hour(df, "Train number")
+        fig = self._plot_grouped(grouped, "Train number")
+        return (fig, grouped) if return_data else fig
+
+    def plot_by_relation_direction(self, selected_relations=None, return_data=False):
+        df = self.df.copy()
+        if selected_relations:
+            df = df[df["Relation direction"].isin(selected_relations)]
+        grouped = self._group_by_hour(df, "Relation direction")
+        fig = self._plot_grouped(grouped, "Relation direction")
+        return (fig, grouped) if return_data else fig
