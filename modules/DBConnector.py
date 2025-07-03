@@ -129,22 +129,21 @@ class DBConnector:
         print(f"Début de l'insertion dans la table {table_name}")
         
         # Échapper les apostrophes pour SQL (doubler les apostrophes)
-        for column in data.columns:
-            data = data.withColumn(column, regexp_replace(col(column), "'", "''"))
+        for column in rows.columns:
+            rows = rows.withColumn(column, regexp_replace(col(column), "'", "''"))
         print("Nettoyage des apostrophes terminé")
-        for column in data.columns: 
+        for column in rows.columns: 
             if " " in column:
                 new_column = column.replace(" ", "_")
-                data = data.withColumnRenamed(column, new_column)
+                rows = rows.withColumnRenamed(column, new_column)
         print("Replaced escapes by underscores !")
 
         cursor = self.conn.cursor()
-        rows_list = rows.collect()
-        total_rows = len(rows_list)
+        total_rows = rows.count()
         print(f"Nombre total de lignes à insérer: {total_rows}")
         
         table_column_names = self.get_table_columns(table_name)
-        data_column_names = list(rows_list[0].asDict().keys())
+        data_column_names = list(rows.collect()[0].asDict().keys())
         print(f"Colonnes de la table: {', '.join(table_column_names)}")
 
         for i in range(0, total_rows, batch_size):

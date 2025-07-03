@@ -9,6 +9,8 @@ import pandas as pd
 import pyspark
 import pyspark.sql
 import logging
+
+
 class LakeReader:
     """
     A class for reading data files from Azure Data Lake Storage using PySpark.
@@ -156,7 +158,7 @@ class LakeReader:
                 raise FileNotFoundError(f"Le fichier temporaire {temp_file_path} n'existe pas")
             
             # Lire le fichier Parquet
-            df = self.spark.read.parquet(temp_file_path)
+            df = SparkSession.builder.getOrCreate().read.parquet(temp_file_path)
             
             # Stocker le DataFrame en mémoire
             self.loaded_data[blob + "/" + filename] = df
@@ -197,21 +199,20 @@ class LakeReader:
             logging.info(f"Création du fichier temporaire: {temp_file_path}")
 
             if extension == "csv":
-                if df_type == "spark":      df = self.spark.read.csv(temp_file_path, header=True, inferSchema=True, sep=sep)
-                elif df_type == "pandas":   df = pd.read_csv(temp_file_path, sep=sep)
+                if df_type == "spark":
+                    from pyspark.sql import SparkSession
+                    df = SparkSession.builder.getOrCreate().read.csv(temp_file_path, header=True, inferSchema=True, sep=sep)
+                elif df_type == "pandas":
+                    df = pd.read_csv(temp_file_path, sep=sep)
             elif extension == "parquet":
-                if df_type == "spark":      df = self.spark.read.parquet(temp_file_path)
-                elif df_type == "pandas":   df = pd.read_parquet(temp_file_path)
+                if df_type == "spark":
+                    from pyspark.sql import SparkSession
+                    df = SparkSession.builder.getOrCreate().read.parquet(temp_file_path)
+                elif df_type == "pandas":
+                    df = pd.read_parquet(temp_file_path)
             else:
                 raise ValueError(f"Extension {extension} non supportée")
             return df
         except Exception as e:
             print(f"Erreur lors de la lecture du fichier {blob}/{filename}: {str(e)}")
             raise
-        finally:
-            # Clean up temporary file
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception as e:
-                    print(f"Erreur lors de la suppression du fichier temporaire {temp_file_path}: {str(e)}")
