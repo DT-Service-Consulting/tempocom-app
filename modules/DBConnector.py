@@ -35,6 +35,11 @@ class DBConnector:
         self.conn = self.get_conn()
         self.spark = spark
 
+    def get_token(self):
+        credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
+        token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
+        token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+        return token_struct,token_bytes
         
     def get_conn(self) -> pyodbc.Connection:
         """
@@ -46,9 +51,7 @@ class DBConnector:
         Note:
             Uses Azure DefaultAzureCredential to obtain access tokens for authentication.
         """
-        credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
-        token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
-        token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+        token_struct,token_bytes = self.get_token()
         SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
         conn = pyodbc.connect(self.connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
         self.conn = conn
@@ -125,9 +128,15 @@ class DBConnector:
         """
         print(f"Début de l'insertion dans la table {table_name}")
         
-        for column in rows.columns:
-            rows = rows.withColumn(column, regexp_replace(col(column), "'", ""))
+        # Échapper les apostrophes pour SQL (doubler les apostrophes)
+        for column in data.columns:
+            data = data.withColumn(column, regexp_replace(col(column), "'", "''"))
         print("Nettoyage des apostrophes terminé")
+        for column in data.columns: 
+            if " " in column:
+                new_column = column.replace(" ", "_")
+                data = data.withColumnRenamed(column, new_column)
+        print("Replaced escapes by underscores !")
 
         cursor = self.conn.cursor()
         rows_list = rows.collect()
