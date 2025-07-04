@@ -1,3 +1,19 @@
+"""
+Unit tests for the DelayBubbleMap class in objects.Delay_network.
+
+Tests:
+- Data preparation and merging of station and delay data.
+- Correct parsing of geolocation points.
+- Calculation of total delay in minutes.
+- Rendering of Folium map object.
+
+Author: Mohamad Hussain
+Date: [2025-06-20]
+"""
+# ...existing code...
+
+
+
 import pytest
 import pandas as pd
 import ast

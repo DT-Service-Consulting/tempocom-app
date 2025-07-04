@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_folium import st_folium
-from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2
+from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2 ,DelayLineChart
 from objects.Delay_network import DelayHeatmap
 from components import *
 
@@ -31,20 +31,62 @@ bubble_map1 = load_map1()
 bubble_map1.prepare_data1()
 stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
 
+# Combine and deduplicate stations
 all_top_stations = sorted(set(stations_arrival + stations_departure))
 
-# UI: Multi-select
-selected_stations = st.multiselect(
-    "Filter stations shown on the map:",
-    options=all_top_stations,
-    default=all_top_stations
+# Define station clusters
+brussels_stations = [
+    "Bruxelles-Central", "Bruxelles-Congrès", "Bruxelles-Chapelle",
+    "Bruxelles-Midi", "Bruxelles-Nord", "Bruxelles-Schuman",
+    "Bruxelles-Luxembourg", "Bruxelles-Ouest", "Schaerbeek", "Etterbeek",
+    "Watermael", "Germoir", "Delta", "Meiser", "Bockstael", "Simonis",
+    "Haren", "Haren-Sud", "Zaventem", "Nossegem", "Vilvorde", "Forest-Est",
+    "Forest-Midi", "Uccle-Stalle", "Uccle-Calevoet", "Linkebeek", "Holleken",
+    "Anderlecht", "Jette", "Berchem-Sainte-Agathe", "Boondael"
+]
+
+antwerp_stations = [
+    "Anvers-Central", "Anvers-Berchem", "Anvers-Noorderdokken",
+    "Anvers-Luchtbal", "Anvers-Est", "Anvers-Haven", "Anvers-Dam",
+    "Ekeren", "Hoboken-Polder", "Mortsel", "Mortsel-Liersesteenweg",
+    "Mortsel-Oude God", "Duffel", "Lierre", "Kontich-Lint", "Boechout",
+    "Nijlen", "Noorderkempen", "Sint-Mariaburg", "Hemiksem", "Kalmthout",
+    "Kapellen"
+]
+# Station group selector
+st.markdown("### 🎯 Station Filter")
+station_group = st.radio(
+    "Choose a station group to pre-select:",
+    ["All", "Brussels", "Antwerp"],
+    index=0,
+    horizontal=True
 )
 
-# Apply filters
+# Apply initial station group selection
+if station_group == "All":
+    initial_selection = all_top_stations
+elif station_group == "Brussels":
+    initial_selection = brussels_stations
+elif station_group == "Antwerp":
+    initial_selection = antwerp_stations
+else:
+    initial_selection = []
+
+# Intersect with actual available stations
+initial_selection = sorted(set(initial_selection).intersection(set(all_top_stations)))
+
+# Multiselect UI
+selected_stations = st.multiselect(
+    "Manually add/remove stations:",
+    options=all_top_stations,
+    default=initial_selection
+)
+
+# Apply selected station filters to maps
 bubble_map.prepare_data(station_filter=selected_stations)
 bubble_map1.prepare_data1(station_filter=selected_stations)
 
-# Render side-by-side bubble maps
+# Bubble Maps
 st.markdown("### 📍 Delay Bubble Maps")
 col1, col2 = st.columns(2)
 
@@ -58,25 +100,36 @@ with col2:
     m_arrival = bubble_map.render_map()
     st_folium(m_arrival, width=700, height=500)
 
-# Delay heatmaps side-by-side
+# Heatmaps
 st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
 
-# Load heatmap data
-heatmap = DelayHeatmap(delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv")
+heatmap = DelayHeatmap(
+    delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv",
+    top_n=10
+)
 
 col3, col4 = st.columns(2)
 
 with col3:
     st.markdown("#### Departure Delays")
-    heatmap.load_and_prepare()
-    heatmap.filter_and_prepare_heatmap()
-    fig_dep = heatmap.render_heatmap()  # Must return a matplotlib Figure
-    st.plotly_chart(fig_dep)  
-
+    fig_dep = heatmap.render_heatmap(delay_type="departure", station_filter=selected_stations)
+    st.plotly_chart(fig_dep)
 
 with col4:
     st.markdown("#### Arrival Delays")
-    heatmap.load_and_prepare1()
-    heatmap.filter_and_prepare_heatmap1()
-    fig_arr = heatmap.render_heatmap1()
-    st.plotly_chart(fig_arr) 
+    fig_arr = heatmap.render_heatmap(delay_type="arrival", station_filter=selected_stations)
+    st.plotly_chart(fig_arr)
+
+# ✅ NEW SECTION: Delay Line Chart
+st.markdown("### 📈 Delay Trends Over Time")
+
+line_chart = DelayLineChart(
+    delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
+)
+
+fig_line = line_chart.render_line_chart(
+    station_filter=selected_stations,
+    time_unit="hour"  # Can also be "date"
+)
+
+st.plotly_chart(fig_line, use_container_width=True)
