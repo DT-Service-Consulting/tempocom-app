@@ -3,6 +3,8 @@ import pyodbc, struct, os
 from dotenv import load_dotenv
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import regexp_replace, col
+import pandas as pd
+from pyspark.sql import SparkSession
 
 class DBConnector:
     """
@@ -17,7 +19,7 @@ class DBConnector:
         spark: The Spark session for DataFrame operations
     """
     
-    def __init__(self, spark, connection_string=None):
+    def __init__(self, connection_string=None):
         """
         Initialize the DBConnector with Spark session and optional connection string.
         
@@ -32,8 +34,8 @@ class DBConnector:
         else:
             load_dotenv('../config/.env')
             self.connection_string = os.getenv('AZURE_SQL_CONN')
+            self.connection_string_with_pwd = os.getenv('AZURE_ODBC_SQL_CONN')
         self.conn = self.get_conn()
-        self.spark = spark
 
     def get_token(self):
         credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
@@ -51,13 +53,15 @@ class DBConnector:
         Note:
             Uses Azure DefaultAzureCredential to obtain access tokens for authentication.
         """
-        token_struct,token_bytes = self.get_token()
+        
+        #token_struct,token_bytes = self.get_token()
         SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
-        conn = pyodbc.connect(self.connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+        #conn = pyodbc.connect(self.connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+        conn = pyodbc.connect(self.connection_string_with_pwd)
         self.conn = conn
         return conn
     
-    def query(self, query, params=None):
+    def query(self, query, params=None) -> list[dict]:
         """
         Execute a SQL query and return results as a Spark DataFrame.
         
@@ -99,9 +103,7 @@ class DBConnector:
                 
                 # Convert results to list of dictionaries
                 data = [dict(zip(columns, row)) for row in results]
-                # Create Spark DataFrame
-                df = self.spark.createDataFrame(data)
-                return df
+                return data
 
             return None
         except pyodbc.Error as e:
@@ -112,58 +114,6 @@ class DBConnector:
             print(f"An unexpected error occurred: {str(e)}")
             print(query)
             raise
-            
-    def insert_rows(self, table_name, rows: DataFrame, batch_size=50):
-        """
-        Insert rows from a Spark DataFrame into a database table in batches.
-        
-        Args:
-            table_name (str): The name of the target table
-            rows (DataFrame): Spark DataFrame containing the data to insert
-            batch_size (int, optional): Number of rows to insert per batch. Defaults to 50.
-            
-        Note:
-            Automatically cleans apostrophes from data and matches DataFrame columns
-            with table columns for insertion.
-        """
-        print(f"Début de l'insertion dans la table {table_name}")
-        
-        # Échapper les apostrophes pour SQL (doubler les apostrophes)
-        for column in rows.columns:
-            rows = rows.withColumn(column, regexp_replace(col(column), "'", "''"))
-        print("Nettoyage des apostrophes terminé")
-        for column in rows.columns: 
-            if " " in column:
-                new_column = column.replace(" ", "_")
-                rows = rows.withColumnRenamed(column, new_column)
-        print("Replaced escapes by underscores !")
-
-        cursor = self.conn.cursor()
-        total_rows = rows.count()
-        print(f"Nombre total de lignes à insérer: {total_rows}")
-        
-        table_column_names = self.get_table_columns(table_name)
-        data_column_names = list(rows.collect()[0].asDict().keys())
-        print(f"Colonnes de la table: {', '.join(table_column_names)}")
-
-        for i in range(0, total_rows, batch_size):
-            batch = rows_list[i:i + batch_size]
-            current_batch = i // batch_size + 1
-            total_batches = (total_rows + batch_size - 1) // batch_size
-            print(f"Traitement du lot {current_batch}/{total_batches}")
-            
-            insert_query = f"INSERT INTO {table_name} ({', '.join(table_column_names)}) VALUES "
-            values_list = []
-
-            for row in batch:
-                values = ', '.join([f"'{row[column]}'" for column in data_column_names])
-                values_list.append(f"({values})")
-
-            insert_query += ', '.join(values_list)
-            self.query(insert_query)
-            print(f"Lot {current_batch} inséré avec succès")
-            
-        print(f"Insertion terminée pour la table {table_name}")
 
     def get_table_columns(self, table_name):
         """
