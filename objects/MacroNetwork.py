@@ -6,8 +6,8 @@ import numpy as np
 from scipy.sparse.csgraph import floyd_warshall
 import os
 from dotenv import load_dotenv
-
-
+from modules.DBConnector import DBConnector
+from pyspark.sql import SparkSession
 
 class MacroNetwork:
     """
@@ -34,9 +34,40 @@ class MacroNetwork:
             and computes the number of links per station.
         """
         # extracting
-        self.links = get_mart(f'{path_to_mart}/public/network_graph.csv')
-        self.stations = get_mart(f'{path_to_mart}/public/stations.csv')
+        dbc = DBConnector()
+        mn_query = """
+        SELECT 
+    mn.*,
+
+    -- Infos sur le point de départ
+    opd."Complete_name_in_French" AS Departure_Name_FR,
+
+    -- Infos sur le point d’arrivée
+    opa."Complete_name_in_French" AS Arrival_Name_FR,
+
+    -- Nouvelle colonne disabled
+    0 AS disabled
+
+    FROM 
+        macro_network mn
+
+    -- Jointure pour les points de départ
+    INNER JOIN 
+        operational_points opd
+        ON mn.Departure_PTCAR_ID = opd.PTCAR_ID
+
+    -- Jointure pour les points d’arrivée
+    INNER JOIN 
+        operational_points opa
+        ON mn.Arrival_PTCAR_ID = opa.PTCAR_ID"""
+
+
+        self.links = pd.DataFrame(dbc.query(mn_query))
+        print(self.links.head())
+        self.stations = pd.DataFrame(dbc.query("SELECT Geo_Point, PTCAR_ID, Complete_name_in_French as Name_FR, Classification_EN as Classification_FR FROM operational_points where isin_macro_network = 1"))
+        print(self.stations.head())
         #self.available_links = self.links[self.links['disabled'] == 0]
+        
         #processing
         self.compute_number_of_links()
         self.links['Geo_Shape'] = self.links['Geo_Shape'].apply(lambda x: ast.literal_eval(x))
@@ -239,8 +270,8 @@ class MacroNetwork:
 
         # Remplir la matrice d'adjacence avec les distances
         for _, row in available_links.iterrows():
-            i = ptcarid_to_index[int(row['Departure_PTCAR_ID'])]
-            j = ptcarid_to_index[int(row['Arrival_PTCAR_ID'])]
+            i = ptcarid_to_index[row['Departure_PTCAR_ID']]
+            j = ptcarid_to_index[row['Arrival_PTCAR_ID']]
             adj_matrix[i, j] = row["Distance"]
 
         # Appliquer l'algorithme de Floyd-Warshall avec prédécesseurs
