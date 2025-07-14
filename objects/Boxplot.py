@@ -1,3 +1,36 @@
+"""
+Boxplot Visualization Module for Train Delays
+
+This module provides classes for creating interactive boxplots of total train delays (arrival + departure) using Plotly.
+
+Classes
+-------
+- DelayBoxPlot:
+    Generates boxplots of total delay by train direction ("Relation direction").
+- StationBoxPlot:
+    Generates boxplots of total delay by station ("Stopping place (FR)").
+
+Each class loads and cleans the delay data, computes total delay, and provides a method to render a boxplot for the top N directions or stations, or for a user-specified subset.
+
+Dependencies
+------------
+- pandas
+- plotly.express
+
+Typical Usage
+-------------
+Instantiate the desired class with the path to the delay data CSV, then call the `render_boxplot` method to generate the plot.
+
+Example:
+    boxplot = DelayBoxPlot("delays.csv")
+    fig = boxplot.render_boxplot()
+    fig.show()
+"""
+
+
+
+
+
 import pandas as pd
 import plotly.express as px
 

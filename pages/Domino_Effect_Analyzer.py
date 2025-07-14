@@ -1,3 +1,36 @@
+"""
+Domino Effect Analyzer Streamlit App
+
+This Streamlit application provides interactive visualizations for analyzing train delays and their domino effects across the network.
+
+Features
+--------
+- Bubble maps of total arrival and departure delays per station (Folium)
+- Heatmaps of delays by station and hour (Plotly)
+- Boxplots of total delay by train direction and by station (Plotly)
+
+Workflow
+--------
+1. Loads and filters delay and station data from CSV files.
+2. Displays interactive bubble maps for arrival and departure delays.
+3. Shows heatmaps for the top 10 stations by total delay.
+4. Provides boxplots for exploring delay distributions by direction and by station, with user-selectable filters.
+
+Dependencies
+------------
+- streamlit
+- streamlit_folium
+- pandas
+- plotly
+- folium
+
+Typical Usage
+-------------
+Run this script as a Streamlit app to explore and analyze train delay patterns and their network-wide effects.
+
+Example:
+    streamlit run Domino_Effect_Analyzer.py
+"""
 import os
 import streamlit as st
 from streamlit_folium import st_folium

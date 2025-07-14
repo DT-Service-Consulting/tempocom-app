@@ -1,3 +1,38 @@
+"""
+Delay Network Visualization Module
+
+This module provides classes for visualizing train delay data using various interactive and static methods:
+
+Classes
+-------
+- DelayBubbleMap:
+    Visualizes total arrival delays per station as a bubble map using Folium.
+- DelayBubbleMap2:
+    Visualizes total departure delays per station as a bubble map using Folium.
+- DelayHeatmap:
+    Generates heatmaps of delays (arrival or departure) by station and hour using Plotly.
+
+Each class provides methods to load, process, and visualize delay data, supporting filtering and aggregation for flexible analysis.
+
+Dependencies
+------------
+- pandas
+- folium
+- ast
+- matplotlib
+- seaborn
+- plotly
+
+Typical Usage
+-------------
+Instantiate the desired class with the appropriate CSV paths, call the data preparation method, and then render the visualization.
+
+Example:
+    bubble_map = DelayBubbleMap(stations_path, delay_data_path)
+    folium_map = bubble_map.render_map()"""
+
+
+
 import pandas as pd
 import folium
 import ast
