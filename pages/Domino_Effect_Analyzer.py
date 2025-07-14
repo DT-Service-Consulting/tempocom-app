@@ -94,41 +94,77 @@ with col4:
 # -------------------------------
 # 📦 Delay Boxplot by Direction
 # -------------------------------
-st.markdown("### 📦 Delay Boxplot by Direction")
+import os
+import streamlit as st
+from objects.Boxplot import DelayBoxPlot, StationBoxPlot
+
+# Load both boxplot data sources
+@st.cache_resource
+def load_direction_boxplot():
+    return DelayBoxPlot(
+        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv"
+    )
 
 @st.cache_resource
-def load_boxplot():
-    return DelayBoxPlot(delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv")
+def load_station_boxplot():
+    return StationBoxPlot(
+        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv"
+    )
 
-boxplot = load_boxplot()
+boxplot = load_direction_boxplot()
+station_boxplot = load_station_boxplot()
+
+# -------------------------------
+# 📦 Total Delay Boxplot by Direction
+# -------------------------------
+st.markdown("### 📦 Total Delay Boxplot by Direction")
 
 st.markdown(
-    "Explore the **distribution of delays** (arrival or departure) across different train directions. "
-    "You can switch delay types and filter directions."
+    "Explore the **distribution of total delays** (sum of arrival + departure delays) "
+    "across different train directions. This helps identify which directions have the highest variability or median delays."
 )
 
-col5, col6 = st.columns([1, 2])
+# UI Controls
+top_directions = boxplot.df["Relation direction"].value_counts().nlargest(15).index.tolist()
 
-with col5:
-    delay_type = st.radio(
-        "Delay Type:",
-        options=["arrival", "departure"],
-        horizontal=True
-    )
+selected_directions = st.multiselect(
+    "Select Directions:",
+    options=top_directions,
+    default=top_directions[1:5]
+)
 
-with col6:
-    top_directions = boxplot.df["Relation direction"].value_counts().nlargest(15).index.tolist()
-    selected_directions = st.multiselect(
-        "Select Directions:",
-        options=top_directions,
-        default=top_directions[1:5]
-    )
-
+# Plot
 if selected_directions:
     fig_box = boxplot.render_boxplot(
-        delay_type=delay_type,
         directions=selected_directions
     )
     st.plotly_chart(fig_box, use_container_width=True)
 else:
     st.info("⚠️ Please select at least one direction to view the boxplot.")
+
+# -------------------------------
+# 🏢 Total Delay Boxplot by Stopping Place
+# -------------------------------
+st.markdown("### 🏢 Total Delay Boxplot by Stopping Place")
+
+st.markdown(
+    "Visualize the **distribution of total delays by station**. You can choose which stations to include or let the app show the top ones automatically."
+)
+
+# UI Controls
+top_stations = station_boxplot.df["Stopping place (FR)"].value_counts().nlargest(15).index.tolist()
+
+selected_stations = st.multiselect(
+    "Select Stations:",
+    options=top_stations,
+    default=top_stations[1:5]
+)
+
+# Plot
+if selected_stations:
+    fig_station_box = station_boxplot.render_boxplot(
+        stations=selected_stations
+    )
+    st.plotly_chart(fig_station_box, use_container_width=True)
+else:
+    st.info("⚠️ Please select at least one station to view the boxplot.")
