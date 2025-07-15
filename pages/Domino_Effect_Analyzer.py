@@ -23,6 +23,7 @@ Dependencies
 - pandas
 - plotly
 - folium
+- streamlit-option-menu
 
 Typical Usage
 -------------
@@ -31,173 +32,157 @@ Run this script as a Streamlit app to explore and analyze train delay patterns a
 Example:
     streamlit run Domino_Effect_Analyzer.py
 """
+
 import os
 import streamlit as st
+import pandas as pd
 from streamlit_folium import st_folium
-from objects.Delay_network import (
-    DelayBubbleMap,
-    DelayBubbleMap2,
-    DelayHeatmap
-)
-from objects.Boxplot import DelayBoxPlot
-from components import *
-
-# Title and header
-title = "🌊Domino Effect Analyzer"
-page_template(title)
-
-# -------------------------------
-# Load Bubble Maps
-# -------------------------------
-@st.cache_resource
-def load_map():
-    return DelayBubbleMap(
-        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-    )
-
-@st.cache_resource
-def load_map1():
-    return DelayBubbleMap2(
-        stations_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/stations.csv",
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv"
-    )
-
-bubble_map = load_map()
-bubble_map.prepare_data()
-stations_arrival = bubble_map.delay_summary['Stopping place (FR)'].tolist()
-
-bubble_map1 = load_map1()
-bubble_map1.prepare_data1()
-stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
-
-all_top_stations = sorted(set(stations_arrival + stations_departure))
-
-# -------------------------------
-# UI: Station Filter
-# -------------------------------
-selected_stations = st.multiselect(
-    "Filter stations shown on the map:",
-    options=all_top_stations,
-    default=all_top_stations
-)
-
-bubble_map.prepare_data(station_filter=selected_stations)
-bubble_map1.prepare_data1(station_filter=selected_stations)
-
-# -------------------------------
-# 📍 Delay Bubble Maps
-# -------------------------------
-st.markdown("### 📍 Delay Bubble Maps")
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("#### Departure Delays")
-    m_departure = bubble_map1.render_map1()
-    st_folium(m_departure, width=700, height=500)
-
-with col2:
-    st.markdown("#### Arrival Delays")
-    m_arrival = bubble_map.render_map()
-    st_folium(m_arrival, width=700, height=500)
-
-# -------------------------------
-# 🔥 Delay Heatmaps
-# -------------------------------
-st.markdown("### 🔥 Delay Heatmaps (Top 10 Stations)")
-
-heatmap = DelayHeatmap(delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/delays_standardized_titlecase.csv")
-
-col3, col4 = st.columns(2)
-
-with col3:
-    st.markdown("#### Departure Delays")
-    heatmap.load_and_prepare()
-    heatmap.filter_and_prepare_heatmap()
-    fig_dep = heatmap.render_heatmap()
-    st.plotly_chart(fig_dep)
-
-with col4:
-    st.markdown("#### Arrival Delays")
-    heatmap.load_and_prepare1()
-    heatmap.filter_and_prepare_heatmap1()
-    fig_arr = heatmap.render_heatmap1()
-    st.plotly_chart(fig_arr)
-
-# -------------------------------
-# 📦 Delay Boxplot by Direction
-# -------------------------------
-import os
-import streamlit as st
+from streamlit_option_menu import option_menu
+from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2, DelayHeatmap
 from objects.Boxplot import DelayBoxPlot, StationBoxPlot
-
-# Load both boxplot data sources
-@st.cache_resource
-def load_direction_boxplot():
-    return DelayBoxPlot(
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv"
-    )
-
-@st.cache_resource
-def load_station_boxplot():
-    return StationBoxPlot(
-        delay_data_path=f"{os.getenv('MART_RELATIVE_PATH')}/public/df_monthly_with_headers.csv"
-    )
-
-boxplot = load_direction_boxplot()
-station_boxplot = load_station_boxplot()
+from components import page_template
 
 # -------------------------------
-# 📦 Total Delay Boxplot by Direction
+# 🌟 Constants and Paths
 # -------------------------------
-st.markdown("### 📦 Total Delay Boxplot by Direction")
+MART_PATH = os.getenv("MART_RELATIVE_PATH")
+STATIONS_PATH = f"{MART_PATH}/public/stations.csv"
+DELAY_PATH = f"{MART_PATH}/public/delays_standardized_titlecase.csv"
+BOXPLOT_PATH = f"{MART_PATH}/public/df_monthly_with_headers.csv"
 
-st.markdown(
-    "Explore the **distribution of total delays** (sum of arrival + departure delays) "
-    "across different train directions. This helps identify which directions have the highest variability or median delays."
+# -------------------------------
+# 📦 Page Setup
+# -------------------------------
+st.set_page_config(page_title="Domino Effect Analyzer", layout="wide")
+st.title("🌊 Domino Effect Analyzer")
+
+# -------------------------------
+# 🚀 Caching Data
+# -------------------------------
+@st.cache_data
+def load_stations():
+    return pd.read_csv(STATIONS_PATH)
+
+@st.cache_data
+def load_delays():
+    return pd.read_csv(DELAY_PATH)
+
+@st.cache_data
+def load_boxplot_data():
+    return pd.read_csv(BOXPLOT_PATH)
+
+# -------------------------------
+# 🧠 Session State Object Init
+# -------------------------------
+if 'bubble_map' not in st.session_state:
+    st.session_state.bubble_map = DelayBubbleMap(STATIONS_PATH, DELAY_PATH)
+    st.session_state.bubble_map.prepare_data()
+
+if 'bubble_map1' not in st.session_state:
+    st.session_state.bubble_map1 = DelayBubbleMap2(STATIONS_PATH, DELAY_PATH)
+    st.session_state.bubble_map1.prepare_data1()
+
+if 'heatmap' not in st.session_state:
+    st.session_state.heatmap = DelayHeatmap(DELAY_PATH)
+
+if 'direction_box' not in st.session_state or 'station_box' not in st.session_state:
+    st.session_state.direction_box = DelayBoxPlot(BOXPLOT_PATH)
+    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)
+
+bubble_map = st.session_state.bubble_map
+bubble_map1 = st.session_state.bubble_map1
+heatmap = st.session_state.heatmap
+direction_box = st.session_state.direction_box
+station_box = st.session_state.station_box
+
+# -------------------------------
+# 🔀 Navigation Menu
+# -------------------------------
+page = option_menu(
+    menu_title=None,
+    options=["Maps & Heatmaps", "Boxplots"],
+    icons=["map", "bar-chart"],
+    orientation="horizontal",
+    styles={
+        "nav-link-selected": {"background-color": "#0e76a8", "font-weight": "bold"},
+        "icon": {"color": "black", "font-size": "20px"},
+    }
 )
 
-# UI Controls
-top_directions = boxplot.df["Relation direction"].value_counts().nlargest(15).index.tolist()
+# -------------------------------
+# 🗺️ MAPS & HEATMAPS PAGE
+# -------------------------------
+if page == "Maps & Heatmaps":
+    stations_arrival = bubble_map.delay_summary['Stopping place (FR)'].tolist()
+    stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
+    all_stations = sorted(set(stations_arrival + stations_departure))
 
-selected_directions = st.multiselect(
-    "Select Directions:",
-    options=top_directions,
-    default=top_directions[1:5]
-)
-
-# Plot
-if selected_directions:
-    fig_box = boxplot.render_boxplot(
-        directions=selected_directions
+    selected_stations = st.multiselect(
+        "Filter stations shown on the map:",
+        options=all_stations,
+        default=all_stations
     )
-    st.plotly_chart(fig_box, use_container_width=True)
-else:
-    st.info("⚠️ Please select at least one direction to view the boxplot.")
+
+    if st.button("🔁 Update Maps"):
+        bubble_map.prepare_data(station_filter=selected_stations)
+        bubble_map1.prepare_data1(station_filter=selected_stations)
+        st.session_state.maps_ready = True
+
+    if st.session_state.get("maps_ready"):
+        st.subheader("📍 Delay Bubble Maps")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Departure Delays")
+            st_folium(bubble_map1.render_map1(), width=700, height=500)
+
+        with col2:
+            st.markdown("#### Arrival Delays")
+            st_folium(bubble_map.render_map(), width=700, height=500)
+
+    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
+        if st.button("Render Heatmaps"):
+            heatmap.load_and_prepare()
+            heatmap.load_and_prepare1()
+            heatmap.filter_and_prepare_heatmap()
+            heatmap.filter_and_prepare_heatmap1()
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+                st.markdown("#### Departure Delays")
+                st.plotly_chart(heatmap.render_heatmap())
+
+            with col4:
+                st.markdown("#### Arrival Delays")
+                st.plotly_chart(heatmap.render_heatmap1())
 
 # -------------------------------
-# 🏢 Total Delay Boxplot by Stopping Place
+# 📦 BOXPLOTS PAGE
 # -------------------------------
-st.markdown("### 🏢 Total Delay Boxplot by Stopping Place")
+with st.expander("📦 Total Delay Boxplot by Relation"):
+    st.markdown("Select a direction (e.g., 'BINCHE -> TURNHOUT') to show all directions of the same Relation (e.g., 'IC 11').")
 
-st.markdown(
-    "Visualize the **distribution of total delays by station**. You can choose which stations to include or let the app show the top ones automatically."
-)
+    all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
+    selected_direction = st.selectbox("Select a Relation direction:", all_directions, key="dir_select")
 
-# UI Controls
-top_stations = station_boxplot.df["Stopping place (FR)"].value_counts().nlargest(15).index.tolist()
+    if st.button("Show Boxplot for This Relation"):
+        # Step 1: Get the Relation (e.g., IC 11)
+        relation = direction_box.get_relation_from_direction(selected_direction)
 
-selected_stations = st.multiselect(
-    "Select Stations:",
-    options=top_stations,
-    default=top_stations[1:5]
-)
+        if relation:
+            # Step 2: Get all directions under this Relation
+            related_dirs = direction_box.get_directions_by_relation(relation)
+            st.markdown(f"Showing all directions for Relation **{relation}**")
 
-# Plot
-if selected_stations:
-    fig_station_box = station_boxplot.render_boxplot(
-        stations=selected_stations
-    )
-    st.plotly_chart(fig_station_box, use_container_width=True)
-else:
-    st.info("⚠️ Please select at least one station to view the boxplot.")
+            st.plotly_chart(direction_box.render_boxplot(directions=related_dirs), use_container_width=True)
+            # Additional station-level delay boxplot
+            fig_station = direction_box.render_station_distribution_for_direction(selected_direction)
+            if fig_station:
+                st.markdown(f"### 🏢 Delay Distribution by Station for **{selected_direction}**")
+                st.plotly_chart(fig_station, use_container_width=True)
+            else:
+                st.info("No station-level data available for this direction.")
+
+        else:
+            st.warning("⚠️ No Relation found for the selected direction.")

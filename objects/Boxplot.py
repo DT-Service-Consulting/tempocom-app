@@ -27,12 +27,14 @@ Example:
     fig.show()
 """
 
-
-
-
-
 import pandas as pd
 import plotly.express as px
+
+
+def get_direction_key(relation: str) -> str:
+    cities = [c.strip() for c in relation.split("-")]
+    return " - ".join(sorted(cities))
+
 
 class DelayBoxPlot:
     """
@@ -56,25 +58,41 @@ class DelayBoxPlot:
         self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce").fillna(0)
         self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce").fillna(0)
         self.df["Relation direction"] = self.df["Relation direction"].astype(str)
-
-        # Compute total delay
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
         self.df["Total Delay"] = self.df["Delay at arrival"] + self.df["Delay at departure"]
+        self.df["direction_key"] = self.df["Relation direction"].apply(get_direction_key)
 
-    def render_boxplot(self, directions=None, top_n=10):
+    def get_bidirectional(self, direction: str):
+        """
+        Given a direction, return all actual relation names that are bidirectional.
+        """
+        key = get_direction_key(direction)
+        return self.df[self.df["direction_key"] == key]["Relation direction"].unique().tolist()
+
+    def get_relation_from_direction(self, direction: str):
+        """
+        Given a Relation direction, return the corresponding Relation (e.g., IC 11).
+        """
+        match = self.df[self.df["Relation direction"] == direction]["Relation"].dropna().unique()
+        return match[0] if len(match) > 0 else None
+
+    def get_directions_by_relation(self, relation: str):
+        """
+        Return all Relation direction values that belong to the given Relation (e.g., IC 11).
+        """
+        return self.df[self.df["Relation"] == relation]["Relation direction"].dropna().unique().tolist()
+
+    def render_boxplot(self, directions=None):
         """
         Render a Plotly boxplot for total delay by direction.
 
         Args:
-            directions (list, optional): List of directions to include. If None, auto-selects top N by frequency.
-            top_n (int): If directions is None, use top N most frequent directions.
+            directions (list, optional): List of directions to include. If None, auto-selects all available.
         """
         df = self.df[self.df["Total Delay"] > 0].copy()
 
-        # Select top N directions if none specified
-        if directions is None:
-            directions = df["Relation direction"].value_counts().nlargest(top_n).index.tolist()
-
-        df = df[df["Relation direction"].isin(directions)]
+        if directions:
+            df = df[df["Relation direction"].isin(directions)]
 
         fig = px.box(
             df,
@@ -90,13 +108,44 @@ class DelayBoxPlot:
         )
 
         fig.update_layout(
-        showlegend=False,
-        yaxis=dict(range=[0, 1000])  # Set visible y-axis range
-                )
+            showlegend=False,
+            yaxis=dict(range=[0, 1000])
+        )
         return fig
 
+    def render_station_distribution_for_direction(self, direction: str):
+        """
+        Render a boxplot of total delay distribution per station for a specific direction.
 
+        Args:
+            direction (str): The relation direction to filter by.
+        """
+        df = self.df[
+            (self.df["Total Delay"] > 0) &
+            (self.df["Relation direction"] == direction)
+        ].copy()
 
+        if df.empty:
+            return None
+
+        fig = px.box(
+            df,
+            x="Stopping place (FR)",
+            y="Total Delay",
+            points="outliers",
+            color="Stopping place (FR)",
+            labels={
+                "Stopping place (FR)": "Station",
+                "Total Delay": "Delay (minutes)"
+            },
+            title=f"Delay Distribution per Station for {direction}"
+        )
+
+        fig.update_layout(
+            showlegend=False,
+            yaxis=dict(range=[0, 1000])
+        )
+        return fig
 
 
 class StationBoxPlot:
@@ -121,25 +170,19 @@ class StationBoxPlot:
         self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce").fillna(0)
         self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce").fillna(0)
         self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
-
-        # Compute total delay
         self.df["Total Delay"] = self.df["Delay at arrival"] + self.df["Delay at departure"]
 
-    def render_boxplot(self, stations=None, top_n=10):
+    def render_boxplot(self, stations=None):
         """
         Render a Plotly boxplot for total delay by station.
 
         Args:
-            stations (list, optional): List of stations to include. If None, auto-selects top N by frequency.
-            top_n (int): If stations is None, use top N most frequent stations.
+            stations (list, optional): List of stations to include. If None, auto-selects all available.
         """
         df = self.df[self.df["Total Delay"] > 0].copy()
 
-        # Select top N stations if none specified
-        if stations is None:
-            stations = df["Stopping place (FR)"].value_counts().nlargest(top_n).index.tolist()
-
-        df = df[df["Stopping place (FR)"].isin(stations)]
+        if stations:
+            df = df[df["Stopping place (FR)"].isin(stations)]
 
         fig = px.box(
             df,
@@ -156,6 +199,6 @@ class StationBoxPlot:
 
         fig.update_layout(
             showlegend=False,
-            yaxis=dict(range=[0, 1000])  # Limit visual range on Y-axis
+            yaxis=dict(range=[0, 1000])
         )
         return fig
