@@ -14,17 +14,12 @@ Setup:
 Author: Mohamd Hussain  
 Date: [2025-06-20]
 """
-# ...existing code...
-
-
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from objects.MacroNetwork import MacroNetwork
-from dotenv import load_dotenv
 
-load_dotenv('../../tempocom_config/.env')
 
 class TestNetwork:
 

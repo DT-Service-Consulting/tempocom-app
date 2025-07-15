@@ -15,6 +15,9 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
 
+    env:
+      AZURE_ODBC_SQL_CONN: ${{ secrets.AZURE_ODBC_SQL_CONN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
