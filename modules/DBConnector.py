@@ -32,9 +32,7 @@ class DBConnector:
         if connection_string is not None:
             self.connection_string = connection_string
         else:
-            load_dotenv('../config/.env')
-            self.connection_string = os.getenv('AZURE_SQL_CONN')
-            self.connection_string_with_pwd = os.getenv('AZURE_ODBC_SQL_CONN')
+            self.connection_string = os.getenv('AZURE_ODBC_SQL_CONN')
         self.conn = self.get_conn()
 
     def get_token(self):
@@ -57,7 +55,7 @@ class DBConnector:
         #token_struct,token_bytes = self.get_token()
         SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
         #conn = pyodbc.connect(self.connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
-        conn = pyodbc.connect(self.connection_string_with_pwd)
+        conn = pyodbc.connect(self.connection_string)
         self.conn = conn
         return conn
     
