@@ -33,8 +33,6 @@ Example:
     streamlit run Domino_Effect_Analyzer.py
 """
 
-# Updated Domino_Effect_Analyzer.py integrating date picker, cluster filtering, and heatmap updates
-
 import os
 import streamlit as st
 import pandas as pd
@@ -52,6 +50,7 @@ BOXPLOT_PATH = f"{MART_PATH}/public/df_monthly_with_headers.csv"
 st.set_page_config(page_title="Domino Effect Analyzer", layout="wide")
 st.title("🌊 Domino Effect Analyzer")
 
+# Caching
 @st.cache_data
 def load_stations(): return pd.read_csv(STATIONS_PATH)
 
@@ -61,6 +60,21 @@ def load_delays(): return pd.read_csv(DELAY_PATH)
 @st.cache_data
 def load_boxplot_data(): return pd.read_csv(BOXPLOT_PATH)
 
+stations_df = load_stations()
+delays_df = load_delays()
+
+# Cluster definitions
+clusters = {
+    "Cluster 1 - Brussels": ["Bruxelles-Central", "Bruxelles-Midi", "Bruxelles-Nord"],
+    "Cluster 2 - Antwerp": [
+        "Anvers-Sud", "Anvers-Est", "Anvers-Luchtbal",
+        "Anvers-Noorderdokken", "Anvers-Berchem",
+        "Anvers-Central", "Anvers-Dam"
+    ]
+
+}
+
+# Session state
 if 'bubble_map' not in st.session_state:
     st.session_state.bubble_map = DelayBubbleMap(STATIONS_PATH, DELAY_PATH)
     st.session_state.bubble_map1 = DelayBubbleMap2(STATIONS_PATH, DELAY_PATH)
@@ -71,7 +85,6 @@ if 'bubble_map' not in st.session_state:
 bubble_map = st.session_state.bubble_map
 bubble_map1 = st.session_state.bubble_map1
 heatmap = st.session_state.heatmap
-
 direction_box = st.session_state.direction_box
 station_box = st.session_state.station_box
 
@@ -83,29 +96,28 @@ page = option_menu(
     orientation="horizontal"
 )
 
+# === MAPS & HEATMAPS ===
 if page == "Maps & Heatmaps":
     selected_date = st.date_input("📅 Choose Day")
 
-    clusters = {
-        "Cluster 1 - Brussels": ["Bruxelles-Central", "Bruxelles-Midi", "Bruxelles-Nord"],
-        "Cluster 2 - Liège": ["Liège-Guillemins", "Ans", "Angleur"],
-        "Cluster 3 - Antwerp": ["Antwerpen-Centraal", "Berchem", "Luchtbal"]
-    }
-
-    selected_cluster = st.radio("📍 Quick Select Cluster", options=list(clusters.keys()))
-
-    bubble_map.prepare_data(date_filter=selected_date)
-    bubble_map1.prepare_data1(date_filter=selected_date)
-    stations_arrival = bubble_map.delay_summary['Stopping place (FR)'].tolist()
-    stations_departure = bubble_map1.delay_summary['Stopping place (FR)'].tolist()
-    all_stations = sorted(set(stations_arrival + stations_departure))
-
+    # -------------------
+    # 🗺️ Bubble Map Filters
+    # -------------------
+    st.markdown("### 🗺️ Bubble Map Filters")
+    selected_cluster = st.radio("📍 Quick Select Cluster", options=list(clusters.keys()), key="bubble_cluster_selector")
     cluster_stations = clusters[selected_cluster]
-    selected_stations = st.multiselect("🏢 Choose Stations to Display in Heatmap", options=all_stations, default=cluster_stations)
+
+    all_stations_in_data = sorted(pd.read_csv(STATIONS_PATH)["Name_FR"].dropna().unique())
+    bubble_map_stations = st.multiselect(
+        "🏢 Choose Stations for Bubble Maps",
+        options=all_stations_in_data,
+        default=cluster_stations,
+        key="bubble_map_station_select"
+    )
 
     if st.button("🔁 Update Maps"):
-        bubble_map.prepare_data(station_filter=selected_stations, date_filter=selected_date)
-        bubble_map1.prepare_data1(station_filter=selected_stations, date_filter=selected_date)
+        bubble_map.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
+        bubble_map1.prepare_data1(station_filter=bubble_map_stations, date_filter=selected_date)
         st.session_state.maps_ready = True
 
     if st.session_state.get("maps_ready"):
@@ -113,26 +125,49 @@ if page == "Maps & Heatmaps":
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("#### Departure Delays")
-            st_folium(bubble_map1.render_map1(), width=700, height=500)
+            st_folium(bubble_map1.render_map1(), width=700, height=500, key="dep_map")
         with col2:
             st.markdown("#### Arrival Delays")
-            st_folium(bubble_map.render_map(), width=700, height=500)
+            st_folium(bubble_map.render_map(), width=700, height=500, key="arr_map")
 
+    # -------------------
+    # 🔥 Heatmap Filters
+    # -------------------
     with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
+        st.markdown("### 🎯 Heatmap Filters")
+
+        heatmap_cluster = st.radio(
+            "📍 Quick Select Cluster for Heatmaps",
+            options=list(clusters.keys()),
+            key="heatmap_cluster_selector"
+        )
+        heatmap_default = clusters[heatmap_cluster]
+
+        heatmap_stations = st.multiselect(
+            "Choose stations for heatmaps",
+            options=all_stations_in_data,
+            default=heatmap_default,
+            key="heatmap_station_select"
+        )
+
         if st.button("Render Heatmaps"):
             heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=selected_stations)
+            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
+
             col3, col4 = st.columns(2)
             with col3:
-                st.markdown("#### Departure Delays")
+                st.markdown("#### Departure Heatmap")
                 st.plotly_chart(heatmap.render_heatmap(arrival=False))
 
             heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=selected_stations)
+            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
+
             with col4:
-                st.markdown("#### Arrival Delays")
+                st.markdown("#### Arrival Heatmap")
                 st.plotly_chart(heatmap.render_heatmap(arrival=True))
 
+
+# === BOXPLOTS ===
 if page == "Boxplots":
     with st.expander("📦 Total Delay Boxplot by Relation"):
         all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())

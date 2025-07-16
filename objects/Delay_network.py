@@ -33,6 +33,10 @@ import folium
 import ast
 import plotly.graph_objects as go
 
+import pandas as pd
+import folium
+import ast
+
 class DelayBubbleMap:
     def __init__(self, stations_path: str, delay_data_path: str):
         self.stations = pd.read_csv(stations_path)
@@ -51,13 +55,13 @@ class DelayBubbleMap:
             .div(60)
             .reset_index()
             .rename(columns={'Delay at arrival': 'Total_Delay_Minutes'})
-        ).nlargest(10, 'Total_Delay_Minutes')
+        )
 
-        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.title()
-        self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
+        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
+        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
 
         if station_filter:
-            station_filter = [s.title() for s in station_filter]
+            station_filter = [s.strip().title() for s in station_filter]
             self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
 
         self.merged = self.delay_summary.merge(
@@ -76,28 +80,34 @@ class DelayBubbleMap:
         lons = [pt[1] for pt in self.merged['Geo_Point']]
         m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
 
+        delays = self.merged['Total_Delay_Minutes']
+        min_delay, max_delay = delays.min(), delays.max()
+
+        def delay_to_color(delay):
+            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
+            r = int(255 * norm)
+            g = int(255 * (1 - norm))
+            return f"#{r:02x}{g:02x}00"
+
         for _, row in self.merged.iterrows():
             delay_min = row['Total_Delay_Minutes']
-            radius = min(max(delay_min / 10, 3), 15)
-            if delay_min < 10:
-                color = 'green'
-            elif delay_min < 30:
-                color = 'orange'
-            else:
-                color = 'red'
+            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
+            radius = 3 + norm * 12
 
             folium.CircleMarker(
                 location=row['Geo_Point'],
                 radius=radius,
-                color=color,
+                color=delay_to_color(delay_min),
                 fill=True,
-                fill_color=color,
+                fill_color=delay_to_color(delay_min),
                 fill_opacity=0.7,
                 popup=f"{row['Name_FR']}<br>Arrival Delay: {round(delay_min, 1)} min"
             ).add_to(m)
 
         return m
-
+import pandas as pd
+import folium
+import ast
 
 class DelayBubbleMap2:
     def __init__(self, stations_path: str, delay_data_path: str):
@@ -117,13 +127,13 @@ class DelayBubbleMap2:
             .div(60)
             .reset_index()
             .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
-        ).nlargest(10, 'Total_Delay_Minutes')
+        )
 
-        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.title()
-        self.stations['Name_FR'] = self.stations['Name_FR'].str.title()
+        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
+        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
 
         if station_filter:
-            station_filter = [s.title() for s in station_filter]
+            station_filter = [s.strip().title() for s in station_filter]
             self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
 
         self.merged = self.delay_summary.merge(
@@ -142,27 +152,32 @@ class DelayBubbleMap2:
         lons = [pt[1] for pt in self.merged['Geo_Point']]
         m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
 
+        delays = self.merged['Total_Delay_Minutes']
+        min_delay, max_delay = delays.min(), delays.max()
+
+        def delay_to_color(delay):
+            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
+            r = int(255 * norm)
+            g = int(255 * (1 - norm))
+            return f"#{r:02x}{g:02x}00"
+
         for _, row in self.merged.iterrows():
             delay_min = row['Total_Delay_Minutes']
-            radius = min(max(delay_min / 10, 3), 15)
-            if delay_min < 10:
-                color = 'green'
-            elif delay_min < 30:
-                color = 'orange'
-            else:
-                color = 'red'
+            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
+            radius = 3 + norm * 12
 
             folium.CircleMarker(
                 location=row['Geo_Point'],
                 radius=radius,
-                color=color,
+                color=delay_to_color(delay_min),
                 fill=True,
-                fill_color=color,
+                fill_color=delay_to_color(delay_min),
                 fill_opacity=0.7,
                 popup=f"{row['Name_FR']}<br>Departure Delay: {round(delay_min, 1)} min"
             ).add_to(m)
 
         return m
+
 
 
 class DelayHeatmap:
