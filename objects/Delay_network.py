@@ -193,7 +193,10 @@ class DelayHeatmap:
             df[time_col] = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
 
             if date_filter:
-                df = df[df[time_col].dt.date == date_filter]
+                # Ensure date_filter is a datetime.date
+                if isinstance(date_filter, pd.Timestamp):
+                    date_filter = date_filter.date()
+                    df = df[df[time_col].dt.date == date_filter]
 
             df["Hour"] = df[time_col].dt.hour
             df = df.dropna(subset=["Hour", delay_col])

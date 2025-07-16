@@ -111,13 +111,13 @@ station_box = st.session_state.station_box
 # Navigation
 page = option_menu(
     menu_title=None,
-    options=["Maps & Heatmaps", "Boxplots"],
+    options=["Dashboard Tab", "Analytics Tab"],
     icons=["map", "bar-chart"],
     orientation="horizontal"
 )
 
 # === MAPS & HEATMAPS ===
-if page == "Maps & Heatmaps":
+if page == "Dashboard Tab":
     selected_date = st.date_input("📅 Choose Day")
 
     # -------------------
@@ -156,46 +156,54 @@ if page == "Maps & Heatmaps":
     # -------------------
 # 🔥 Heatmap Filters
 # -------------------
-with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
-    st.markdown("### 🎯 Heatmap Filters")
+    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
+        st.markdown("### 🎯 Heatmap Filters")
+        all_stations_in_data = sorted(stations_df["Name_FR"].dropna().astype(str).str.strip().str.title().unique())
+        heatmap_cluster = st.radio(
+            "📍 Quick Select Cluster for Heatmaps",
+            options=list(clusters.keys()),
+            key="heatmap_cluster_selector"
+        )
+        heatmap_default = clusters[heatmap_cluster]
 
-    heatmap_cluster = st.radio(
-        "📍 Quick Select Cluster for Heatmaps",
-        options=list(clusters.keys()),
-        key="heatmap_cluster_selector"
-    )
-    heatmap_default = clusters[heatmap_cluster]
+        heatmap_stations = st.multiselect(
+            "Choose stations for heatmaps",
+            options=all_stations_in_data,
+            default=heatmap_default,
+            key="heatmap_station_select"
+        )
 
-    heatmap_stations = st.multiselect(
-        "Choose stations for heatmaps",
-        options=all_stations_in_data,
-        default=heatmap_default,
-        key="heatmap_station_select"
-    )
+        if st.button("Render Heatmaps"):
+            # 🟡 Apply selected date here
+            heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
+            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
 
-    if st.button("Render Heatmaps"):
-        # 🟡 Apply selected date here
-        heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
-        heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
+            col3, col4 = st.columns(2)
+            with col3:
+                st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                st.plotly_chart(heatmap.render_heatmap(arrival=False))
 
-        col3, col4 = st.columns(2)
-        with col3:
-            st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-            st.plotly_chart(heatmap.render_heatmap(arrival=False))
+            # 🔁 Repeat for arrival
+            heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
+            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
 
-        # 🔁 Repeat for arrival
-        heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
-        heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
+            with col4:
+                st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                st.plotly_chart(heatmap.render_heatmap(arrival=True))
 
-        with col4:
-            st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-            st.plotly_chart(heatmap.render_heatmap(arrival=True))
+
+
+
+
 
 
 # === BOXPLOTS ===
-if page == "Boxplots":
+if page == "Analytics Tab":
     with st.expander("📦 Total Delay Boxplot by Relation"):
-        all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
+        all_directions = sorted(
+            d for d in direction_box.df["Relation direction"].dropna().unique()
+            if "EURST" not in d
+        )
         selected_direction = st.selectbox("Select a Relation direction:", all_directions)
 
         if st.button("Show Boxplot for This Relation"):
