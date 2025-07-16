@@ -35,7 +35,9 @@ Example:
 
 import os
 import streamlit as st
+
 import pandas as pd
+
 from streamlit_folium import st_folium
 from streamlit_option_menu import option_menu
 from objects.Delay_network import DelayBubbleMap, DelayBubbleMap2, DelayHeatmap
@@ -52,10 +54,28 @@ st.title("🌊 Domino Effect Analyzer")
 
 # Caching
 @st.cache_data
-def load_stations(): return pd.read_csv(STATIONS_PATH)
+def load_stations():
+    return pd.read_csv(
+        STATIONS_PATH,
+        usecols=["Name_FR", "Geo_Point"]
+    )
 
 @st.cache_data
-def load_delays(): return pd.read_csv(DELAY_PATH)
+def load_delays():
+    return pd.read_csv(
+        DELAY_PATH,
+        usecols=[
+            "Stopping place (FR)", "Actual arrival time", "Actual departure time",
+            "Delay at arrival", "Delay at departure"
+        ],
+        parse_dates=["Actual arrival time", "Actual departure time"],
+        dtype={
+            "Stopping place (FR)": "category",
+            "Delay at arrival": "float32",
+            "Delay at departure": "float32"
+        }
+    )
+
 
 @st.cache_data
 def load_boxplot_data(): return pd.read_csv(BOXPLOT_PATH)
@@ -133,38 +153,43 @@ if page == "Maps & Heatmaps":
     # -------------------
     # 🔥 Heatmap Filters
     # -------------------
-    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
-        st.markdown("### 🎯 Heatmap Filters")
+    # -------------------
+# 🔥 Heatmap Filters
+# -------------------
+with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
+    st.markdown("### 🎯 Heatmap Filters")
 
-        heatmap_cluster = st.radio(
-            "📍 Quick Select Cluster for Heatmaps",
-            options=list(clusters.keys()),
-            key="heatmap_cluster_selector"
-        )
-        heatmap_default = clusters[heatmap_cluster]
+    heatmap_cluster = st.radio(
+        "📍 Quick Select Cluster for Heatmaps",
+        options=list(clusters.keys()),
+        key="heatmap_cluster_selector"
+    )
+    heatmap_default = clusters[heatmap_cluster]
 
-        heatmap_stations = st.multiselect(
-            "Choose stations for heatmaps",
-            options=all_stations_in_data,
-            default=heatmap_default,
-            key="heatmap_station_select"
-        )
+    heatmap_stations = st.multiselect(
+        "Choose stations for heatmaps",
+        options=all_stations_in_data,
+        default=heatmap_default,
+        key="heatmap_station_select"
+    )
 
-        if st.button("Render Heatmaps"):
-            heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
+    if st.button("Render Heatmaps"):
+        # 🟡 Apply selected date here
+        heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
+        heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
 
-            col3, col4 = st.columns(2)
-            with col3:
-                st.markdown("#### Departure Heatmap")
-                st.plotly_chart(heatmap.render_heatmap(arrival=False))
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+            st.plotly_chart(heatmap.render_heatmap(arrival=False))
 
-            heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
+        # 🔁 Repeat for arrival
+        heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
+        heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
 
-            with col4:
-                st.markdown("#### Arrival Heatmap")
-                st.plotly_chart(heatmap.render_heatmap(arrival=True))
+        with col4:
+            st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+            st.plotly_chart(heatmap.render_heatmap(arrival=True))
 
 
 # === BOXPLOTS ===

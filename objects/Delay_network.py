@@ -42,6 +42,7 @@ class DelayBubbleMap:
         self.stations = pd.read_csv(stations_path)
         self.delays = pd.read_csv(delay_data_path)
 
+
     def prepare_data(self, station_filter=None, date_filter=None):
         self.delays = self.delays[self.delays['Delay at arrival'] > 0].copy()
 
@@ -105,6 +106,233 @@ class DelayBubbleMap:
             ).add_to(m)
 
         return m
+
+
+class DelayBubbleMap2:
+    def __init__(self, stations_path: str, delay_data_path: str):
+        self.stations = pd.read_csv(stations_path)
+        self.delays = pd.read_csv(delay_data_path)
+
+    def prepare_data1(self, station_filter=None, date_filter=None):
+        self.delays = self.delays[self.delays['Delay at departure'] > 0].copy()
+
+        self.delays['Actual departure time'] = pd.to_datetime(
+            self.delays['Actual departure time'], format="%Y-%m-%d %H:%M:%S", errors='coerce'
+        )
+        if date_filter:
+            self.delays = self.delays[self.delays['Actual departure time'].dt.date == date_filter]
+
+        self.delay_summary = (
+            self.delays.groupby('Stopping place (FR)')['Delay at departure']
+            .sum().div(60).reset_index()
+            .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
+        )
+
+        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
+        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
+
+        if station_filter:
+            station_filter = [s.strip().title() for s in station_filter]
+            self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
+
+        self.merged = self.delay_summary.merge(
+            self.stations[['Name_FR', 'Geo_Point']],
+            left_on='Stopping place (FR)',
+            right_on='Name_FR',
+            how='inner'
+        )
+        self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
+
+    def render_map1(self):
+        if self.merged.empty:
+            return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
+
+        lats = [pt[0] for pt in self.merged['Geo_Point']]
+        lons = [pt[1] for pt in self.merged['Geo_Point']]
+        m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
+
+        delays = self.merged['Total_Delay_Minutes']
+        min_delay, max_delay = delays.min(), delays.max()
+
+        def delay_to_color(delay):
+            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
+            r = int(255 * norm)
+            g = int(255 * (1 - norm))
+            return f"#{r:02x}{g:02x}00"
+
+        for _, row in self.merged.iterrows():
+            delay_min = row['Total_Delay_Minutes']
+            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
+            radius = 3 + norm * 12
+
+            folium.CircleMarker(
+                location=row['Geo_Point'],
+                radius=radius,
+                color=delay_to_color(delay_min),
+                fill=True,
+                fill_color=delay_to_color(delay_min),
+                fill_opacity=0.7,
+                popup=f"{row['Name_FR']}<br>Departure Delay: {round(delay_min, 1)} min"
+            ).add_to(m)
+
+        return m
+
+
+
+class DelayHeatmap:
+    def __init__(self, delay_data_path):
+        self.delay_data_path = delay_data_path
+
+    def load_and_prepare(self, arrival=False, date_filter=None):
+            df = pd.read_csv(self.delay_data_path)
+            delay_col = "Delay at arrival" if arrival else "Delay at departure"
+            time_col = "Actual arrival time" if arrival else "Actual departure time"
+
+            df[delay_col] = pd.to_numeric(df[delay_col], errors="coerce")
+            df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
+            df[time_col] = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+
+            if date_filter:
+                df = df[df[time_col].dt.date == date_filter]
+
+            df["Hour"] = df[time_col].dt.hour
+            df = df.dropna(subset=["Hour", delay_col])
+            self.df = df
+
+
+    def filter_and_prepare_heatmap(self, arrival=False, station_filter=None, top_n=10):
+            df = self.df.copy()
+            delay_col = "Delay at arrival" if arrival else "Delay at departure"
+
+            if station_filter:
+                station_filter = [s.title() for s in station_filter]
+                df = df[df["Stopping place (FR)"].isin(station_filter)]
+
+            df["StopLabel"] = df["Stopping place (FR)"].str.title()
+
+            top_stations = (
+                df.groupby("StopLabel")[delay_col]
+                .sum()
+                .div(60)
+                .sort_values(ascending=False)
+                .head(top_n)
+                .index
+            )
+
+            df_top = df[df["StopLabel"].isin(top_stations)]
+
+            heatmap_data = (
+                df_top.groupby(["StopLabel", "Hour"])[delay_col]
+                .sum()
+                .reset_index()
+            )
+
+            pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values=delay_col).fillna(0)
+            pivot["Total"] = pivot.sum(axis=1)
+            self.pivot_table = pivot.sort_values("Total", ascending=False).drop(columns="Total")
+
+    def render_heatmap(self, arrival=False):
+        if self.pivot_table is None:
+            raise ValueError("Run filter_and_prepare_heatmap() first.")
+
+        title = "Arrival" if arrival else "Departure"
+        return px.imshow(
+            self.pivot_table,
+            labels=dict(x="Hour", y="Station", color="Total Delay (min)"),
+            aspect="auto",
+            color_continuous_scale="YlOrRd",
+            title=f"{title} Delay Heatmap (Top 10 Stations)"
+        )
+
+
+
+class DelayLineChart:
+    """
+    Draws a line chart showing average departure and arrival delays over time,
+    filtered by selected stations.
+    """
+
+    def __init__(self, delay_data_path: str):
+        self.df = pd.read_csv(delay_data_path)
+        self._prepare_common_fields()
+
+    def _prepare_common_fields(self):
+        self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.strip().str.title()
+        self.df["Actual departure time"] = self._parse_datetime_column(self.df, "Actual departure time")
+        self.df["Actual arrival time"] = self._parse_datetime_column(self.df, "Actual arrival time")
+        self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce")
+        self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce")
+
+    def _parse_datetime_column(self, df: pd.DataFrame, time_col: str) -> pd.Series:
+        parsed = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+        mask = parsed.isna() & df[time_col].notna()
+        if mask.any():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                parsed.loc[mask] = pd.to_datetime(df.loc[mask, time_col], errors="coerce")
+        return parsed
+
+    def _aggregate_delays(self, station_filter=None, time_unit="hour"):
+        df = self.df.copy()
+
+        if station_filter:
+            df = df[df["Stopping place (FR)"].isin(station_filter)]
+
+        if time_unit == "hour":
+            df["Hour"] = df["Actual departure time"].dt.hour
+        elif time_unit == "date":
+            df["Hour"] = df["Actual departure time"].dt.date
+        else:
+            raise ValueError("time_unit must be 'hour' or 'date'")
+
+        agg = df.groupby("Hour").agg({
+            "Delay at departure": "mean",
+            "Delay at arrival": "mean"
+        }).dropna()
+
+        return agg
+
+    def render_line_chart(self, station_filter=None, time_unit="hour"):
+        agg = self._aggregate_delays(station_filter=station_filter, time_unit=time_unit)
+
+        fig = go.Figure()
+
+        # Departure Delay in Gold
+        fig.add_trace(go.Scatter(
+            x=agg.index, y=agg["Delay at departure"],
+            mode='lines+markers',
+            name='Departure Delay (min)',
+            line=dict(color='gold', width=2),
+            marker=dict(color='gold')
+        ))
+
+        # Arrival Delay in Orange
+        fig.add_trace(go.Scatter(
+            x=agg.index, y=agg["Delay at arrival"],
+            mode='lines+markers',
+            name='Arrival Delay (min)',
+            line=dict(color='red', width=2),
+            marker=dict(color='red')
+        ))
+
+        fig.update_layout(
+            title="📈 Average Delays per Hour (Selected Stations)",
+            xaxis_title="Hour of Day" if time_unit == "hour" else "Date",
+            yaxis_title="Delay (minutes)",
+            xaxis=dict(
+                type="category" if time_unit == "hour" else "linear",
+                tickmode='linear',
+                dtick=1,
+                tick0=0,
+                tickangle=0
+            ),
+            legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.5)"),
+            margin=dict(t=50, l=50, r=50, b=50),
+            height=450
+        )
+
+        return fig
+
 import pandas as pd
 import folium
 import ast
