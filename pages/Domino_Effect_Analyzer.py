@@ -197,26 +197,42 @@ if page == "Dashboard Tab":
 
 
 
-# === BOXPLOTS ===
+## === BOXPLOTS ===
 if page == "Analytics Tab":
     with st.expander("📦 Total Delay Boxplot by Relation"):
+        # Filter available directions (excluding EURST)
         all_directions = sorted(
             d for d in direction_box.df["Relation direction"].dropna().unique()
             if "EURST" not in d
         )
-        selected_direction = st.selectbox("Select a Relation direction:", all_directions)
 
-        if st.button("Show Boxplot for This Relation"):
-            relation = direction_box.get_relation_from_direction(selected_direction)
-            if relation:
-                related_dirs = direction_box.get_directions_by_relation(relation)
-                st.markdown(f"Showing all directions for Relation **{relation}**")
-                st.plotly_chart(direction_box.render_boxplot(directions=related_dirs), use_container_width=True)
-                fig_station = direction_box.render_station_distribution_for_direction(selected_direction)
+        # Allow selecting up to 3 directions
+        selected_directions = st.multiselect(
+            "Select up to 3 Relation Directions:",
+            options=all_directions,
+            max_selections=3
+        )
+
+        if selected_directions:
+            # Get all directions related to the selected relations
+            all_related_dirs = []
+            for d in selected_directions:
+                relation = direction_box.get_relation_from_direction(d)
+                if relation:
+                    all_related_dirs.extend(direction_box.get_directions_by_relation(relation))
+
+            # Deduplicate directions
+            all_related_dirs = list(set(all_related_dirs))
+
+            st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
+            fig = direction_box.render_boxplot(directions=all_related_dirs)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Station-level boxplots for each selected direction
+            for d in selected_directions:
+                st.markdown(f"### 🏢 Delay Distribution by Station for **{d}**")
+                fig_station = direction_box.render_station_distribution_for_direction(d)
                 if fig_station:
-                    st.markdown(f"### 🏢 Delay Distribution by Station for **{selected_direction}**")
                     st.plotly_chart(fig_station, use_container_width=True)
                 else:
-                    st.info("No station-level data available for this direction.")
-            else:
-                st.warning("⚠️ No Relation found for the selected direction.")
+                    st.info(f"No station-level data for {d}.")
