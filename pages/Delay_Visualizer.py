@@ -80,6 +80,14 @@ if 'bubble_map' not in st.session_state:
     st.session_state.direction_box = DelayBoxPlot(BOXPLOT_PATH)
     st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)
 
+
+
+if "station_box" not in st.session_state:
+    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)  # Choose a sensible default
+
+# Now safe to access
+station_box = st.session_state.station_box
+
 bubble_map = st.session_state.bubble_map
 bubble_map1 = st.session_state.bubble_map1
 heatmap = st.session_state.heatmap
