@@ -19,16 +19,24 @@ pydeck = "^0.9.1"
 pytest = "^8.4.1"
 seaborn = "^0.13.2"
 plotly = "^6.1.2"
+azure-storage-blob = "^12.25.1"
+azure-storage-file = "^2.1.0"
+azure-storage-file-datalake = "^12.20.0"
+pyspark = "^4.0.0"
+azure-identity = "^1.23.0"
+pyodbc = "^5.2.0"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
+poetry-dotenv-plugin = "^0.2.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
 
 [build-system]
 requires = ["poetry-core"]

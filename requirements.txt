@@ -11,3 +11,7 @@ anyio
 pretty-errors
 python-dotenv
 streamlit_option_menu
+plotly.express
+warnings
+ipywidgets
+

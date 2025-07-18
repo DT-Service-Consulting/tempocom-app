@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Image Description" height="100"/>
+  <img src="./assets/logo.png" alt="Image Description" height="100"/>
 </p>
 
 <h1 align="center">TEMPO<span style="color:#5ec9c1;">C</span><span style="color:#7fc29b;">O</span><span style="color:#92b06f;">M</span></h1>

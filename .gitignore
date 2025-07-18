@@ -34,6 +34,42 @@ poetry.lock
 .DS_Store
 Thumbs.db 
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Poetry
+.venv/
+poetry.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db 
+
 /.app.env
 /.env
 /mart/private/*
@@ -44,3 +80,4 @@ brouillon.
 sensitive_deployment.sh
 brouillon.ipynb
 venv
+

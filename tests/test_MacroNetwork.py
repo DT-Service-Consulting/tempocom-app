@@ -1,10 +1,25 @@
+"""
+Unit tests for the MacroNetwork class in objects.MacroNetwork.
+
+Tests:
+- Shortest path calculation between stations.
+- Handling of no-path scenarios after closing links.
+- Shortest path when start and end stations are the same.
+- Effect of closing links on shortest path calculation.
+
+Setup:
+- Loads environment variables from '../../tempocom_config/.env'.
+- Initializes a MacroNetwork instance for each test.
+
+Author: Mohamd Hussain  
+Date: [2025-06-20]
+"""
+
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from objects.MacroNetwork import MacroNetwork
-from dotenv import load_dotenv
 
-load_dotenv('../../tempocom_config/.env')
 
 class TestNetwork:
 
