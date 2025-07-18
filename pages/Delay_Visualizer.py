@@ -7,7 +7,7 @@ from objects.Delay_network import (
     DelayBubbleMap, DelayBubbleMap2, DelayHeatmap,
     DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain, DelayHourlyLinkTotalLineChart
 )
-from objects.Boxplot import DelayBoxPlot, StationBoxPlot
+from objects.Boxplot import DelayBoxPlot, StationBoxPlot ,LinkBoxPlot
 
 # Paths
 MART_PATH = os.getenv("MART_RELATIVE_PATH")
@@ -73,12 +73,23 @@ clusters = {
         "Anvers-Central", "Anvers-Dam"]
 }
 
-if 'bubble_map' not in st.session_state:
+if "bubble_map" not in st.session_state:
     st.session_state.bubble_map = DelayBubbleMap(STATIONS_PATH, DELAY_PATH)
+
+if "bubble_map1" not in st.session_state:
     st.session_state.bubble_map1 = DelayBubbleMap2(STATIONS_PATH, DELAY_PATH)
+
+if "heatmap" not in st.session_state:
     st.session_state.heatmap = DelayHeatmap(DELAY_PATH)
+
+if "direction_box" not in st.session_state:
     st.session_state.direction_box = DelayBoxPlot(BOXPLOT_PATH)
+
+if "station_box" not in st.session_state:
     st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)
+
+if "links_box" not in st.session_state:
+    st.session_state.links_box = LinkBoxPlot(BOXPLOT_PATH)
 
 
 
@@ -93,6 +104,7 @@ bubble_map1 = st.session_state.bubble_map1
 heatmap = st.session_state.heatmap
 direction_box = st.session_state.direction_box
 station_box = st.session_state.station_box
+link_box = st.session_state.links_box
 
 page = option_menu(
     menu_title=None,
@@ -152,30 +164,53 @@ if page == "Dashboard Tab":
                 st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
                 st.plotly_chart(heatmap.render_heatmap(arrival=True))
 
+# Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
 elif page == "Analytics Tab":
     with st.expander("📦 Total Delay Boxplot by Relation"):
-        all_directions = sorted(d for d in direction_box.df["Relation direction"].dropna().unique() if "EURST" not in d)
-        selected_directions = st.multiselect("Select up to 3 Relation Directions:", options=all_directions, max_selections=3)
+        # Get all unique relation directions, filtering out EURST
+        all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
+
+
+        filtered_directions = [d for d in all_directions if "EURST" not in d]
+
+        selected_directions = st.multiselect(
+            "Select up to 3 Relation Directions:",
+            options=filtered_directions,
+            max_selections=3
+        )
 
         if selected_directions:
-            all_related_dirs = []
+            # -- Get all related directions across selected relations
+            all_related_dirs = set()
             for d in selected_directions:
                 relation = direction_box.get_relation_from_direction(d)
                 if relation:
-                    all_related_dirs.extend(direction_box.get_directions_by_relation(relation))
-            all_related_dirs = list(set(all_related_dirs))
+                    related = direction_box.get_directions_by_relation(relation)
+                    all_related_dirs.update(related)
 
-            st.markdown("### 🌟 Total Delay Distribution for Selected Relations")
-            fig = direction_box.render_boxplot(directions=all_related_dirs)
-            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
+            fig = direction_box.render_boxplot(directions=list(all_related_dirs))
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No delay distribution data found for the selected directions.")
 
+            # -- Per-direction breakdowns
             for d in selected_directions:
                 st.markdown(f"### 🏢 Delay Distribution by Station for **{d}**")
                 fig_station = direction_box.render_station_distribution_for_direction(d)
                 if fig_station:
                     st.plotly_chart(fig_station, use_container_width=True)
                 else:
-                    st.info(f"No station-level data for {d}.")
+                    st.info(f"No station-level data for **{d}**.")
+
+                st.markdown(f"### 🔗 Delay Between Consecutive Stations in **{d}**")
+                fig_link = link_box.render_boxplot(d)
+                if fig_link:
+                    st.plotly_chart(fig_link, use_container_width=True)
+                else:
+                    st.info(f"No link-level data for **{d}**.")
+
 
 elif page == "Hourly Delay Tab":
     st.subheader("📍 Delay by Station")

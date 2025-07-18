@@ -247,20 +247,23 @@ class LinkBoxPlot:
         if df_dir.empty:
             return pd.DataFrame()
 
-        # Sort by train and planned departure
         df_dir.sort_values(by=["Train number", "Planned departure time"], inplace=True)
 
-        # For each train, compute station pairs and link-level delay
         records = []
+
         for train_id, group in df_dir.groupby("Train number"):
             group = group.reset_index(drop=True)
             for i in range(len(group) - 1):
                 from_stop = group.loc[i, "Stopping place (FR)"]
                 to_stop = group.loc[i + 1, "Stopping place (FR)"]
 
-                link_label = f"{from_stop} ➝ {to_stop}"
+                # 🚫 Skip links where start and end station are the same
+                if from_stop == to_stop:
+                    continue
 
+                link_label = f"{from_stop} ➝ {to_stop}"
                 delay = group.loc[i + 1, "Total Delay"]
+
                 if delay > 0:
                     records.append({
                         "Train number": train_id,
@@ -271,6 +274,7 @@ class LinkBoxPlot:
                     })
 
         return pd.DataFrame(records)
+
 
     def render_boxplot(self, direction: str):
         """

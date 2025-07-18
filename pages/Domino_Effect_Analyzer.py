@@ -198,48 +198,48 @@ if page == "Dashboard Tab":
 
 
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
+if page == "Analytics Tab":
+    with st.expander("📦 Total Delay Boxplot by Relation"):
+        # Get all unique relation directions, filtering out EURST
+        all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
 
-with st.expander("📦 Total Delay Boxplot by Relation"):
-    # Get all unique relation directions, filtering out EURST
-    all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
 
+        filtered_directions = [d for d in all_directions if "EURST" not in d]
 
-    filtered_directions = [d for d in all_directions if "EURST" not in d]
+        selected_directions = st.multiselect(
+            "Select up to 3 Relation Directions:",
+            options=filtered_directions,
+            max_selections=3
+        )
 
-    selected_directions = st.multiselect(
-        "Select up to 3 Relation Directions:",
-        options=filtered_directions,
-        max_selections=3
-    )
+        if selected_directions:
+            # -- Get all related directions across selected relations
+            all_related_dirs = set()
+            for d in selected_directions:
+                relation = direction_box.get_relation_from_direction(d)
+                if relation:
+                    related = direction_box.get_directions_by_relation(relation)
+                    all_related_dirs.update(related)
 
-    if selected_directions:
-        # -- Get all related directions across selected relations
-        all_related_dirs = set()
-        for d in selected_directions:
-            relation = direction_box.get_relation_from_direction(d)
-            if relation:
-                related = direction_box.get_directions_by_relation(relation)
-                all_related_dirs.update(related)
-
-        st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
-        fig = direction_box.render_boxplot(directions=list(all_related_dirs))
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No delay distribution data found for the selected directions.")
-
-        # -- Per-direction breakdowns
-        for d in selected_directions:
-            st.markdown(f"### 🏢 Delay Distribution by Station for **{d}**")
-            fig_station = direction_box.render_station_distribution_for_direction(d)
-            if fig_station:
-                st.plotly_chart(fig_station, use_container_width=True)
+            st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
+            fig = direction_box.render_boxplot(directions=list(all_related_dirs))
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info(f"No station-level data for **{d}**.")
+                st.info("No delay distribution data found for the selected directions.")
 
-            st.markdown(f"### 🔗 Delay Between Consecutive Stations in **{d}**")
-            fig_link = link_box.render_boxplot(d)
-            if fig_link:
-                st.plotly_chart(fig_link, use_container_width=True)
-            else:
-                st.info(f"No link-level data for **{d}**.")
+            # -- Per-direction breakdowns
+            for d in selected_directions:
+                st.markdown(f"### 🏢 Delay Distribution by Station for **{d}**")
+                fig_station = direction_box.render_station_distribution_for_direction(d)
+                if fig_station:
+                    st.plotly_chart(fig_station, use_container_width=True)
+                else:
+                    st.info(f"No station-level data for **{d}**.")
+
+                st.markdown(f"### 🔗 Delay Between Consecutive Stations in **{d}**")
+                fig_link = link_box.render_boxplot(d)
+                if fig_link:
+                    st.plotly_chart(fig_link, use_container_width=True)
+                else:
+                    st.info(f"No link-level data for **{d}**.")
