@@ -26,7 +26,7 @@
             "description": "Visualize the delays in the network.",
             "access": "mix",
             "redirect": "pages/Delay_Visualizer.py",
-            "available": false
+            "available": true
         },
         {
             "title": "🌊Domino Effect Analyzer",
