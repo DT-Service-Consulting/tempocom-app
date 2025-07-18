@@ -43,7 +43,4 @@ brouillon.
 /scripts/*
 sensitive_deployment.sh
 brouillon.ipynb
-train_sample.csv
-df_monthly_with_headers.csv
-merged_data.csv
 venv
