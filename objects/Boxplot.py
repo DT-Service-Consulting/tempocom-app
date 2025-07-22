@@ -26,9 +26,9 @@ Example:
     fig = boxplot.render_boxplot()
     fig.show()
 """
-
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 
 def get_direction_key(relation: str) -> str:
@@ -38,7 +38,8 @@ def get_direction_key(relation: str) -> str:
 
 class DelayBoxPlot:
     """
-    Creates boxplots of total train delays (arrival + departure) by direction.
+    Creates boxplots of total train delays (arrival + departure) by direction,
+    and overlays planning duration curves or bands.
     """
 
     def __init__(self, delay_data_path: str):
@@ -59,8 +60,11 @@ class DelayBoxPlot:
         self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce").fillna(0)
         self.df["Relation direction"] = self.df["Relation direction"].astype(str)
         self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
+        self.df["Train number"] = self.df["Train number"].astype(str)
         self.df["Total Delay"] = self.df["Delay at arrival"] + self.df["Delay at departure"]
         self.df["direction_key"] = self.df["Relation direction"].apply(get_direction_key)
+        self.df["Planned departure time"] = pd.to_datetime(self.df["Planned departure time"], errors="coerce", infer_datetime_format=True)
+        self.df["Planned arrival time"] = pd.to_datetime(self.df["Planned arrival time"], errors="coerce", infer_datetime_format=True)
 
     def get_bidirectional(self, direction: str):
         """
@@ -82,17 +86,50 @@ class DelayBoxPlot:
         """
         return self.df[self.df["Relation"] == relation]["Relation direction"].dropna().unique().tolist()
 
+    def compute_planning_band(self, duration_df, threshold: float = 5.0):
+        """
+        Aggregates per relation to compute planning bands and identifies significant variance.
+
+        Returns a DataFrame with mean, min, max, std, and variance flag.
+        """
+        summary = duration_df.groupby("Relation")["Planned Duration (min)"].agg(["mean", "min", "max", "std"]).reset_index()
+        summary["Significant Variance"] = summary["std"] > threshold
+        return summary
+
+    def compute_planning_durations(self):
+        """
+        Vectorized computation of planned durations per train.
+        """
+        df = self.df.dropna(subset=["Planned departure time", "Planned arrival time"]).copy()
+
+        # Ensure sorting by planned times
+        df = df.sort_values(["Train number", "Planned departure time", "Planned arrival time"])
+
+        # Get first departure time and relation per train
+        dep_df = df.groupby("Train number").first().reset_index()[["Train number", "Planned departure time", "Relation"]]
+        # Get last arrival time per train
+        arr_df = df.groupby("Train number").last().reset_index()[["Train number", "Planned arrival time"]]
+
+        # Merge
+        merged = pd.merge(dep_df, arr_df, on="Train number")
+        merged["Planned Duration (min)"] = (merged["Planned arrival time"] - merged["Planned departure time"]).dt.total_seconds() / 60.0
+
+        return merged[["Train number", "Relation", "Planned Duration (min)"]]
+
+
     def render_boxplot(self, directions=None):
         """
-        Render a Plotly boxplot for total delay by direction.
+        Render a Plotly boxplot for total delay by direction with planning overlay.
 
         Args:
-            directions (list, optional): List of directions to include. If None, auto-selects all available.
+            directions (list, optional): List of directions to include. If None, includes all.
         """
         df = self.df[self.df["Total Delay"] > 0].copy()
-
         if directions:
             df = df[df["Relation direction"].isin(directions)]
+        
+
+
 
         fig = px.box(
             df,
@@ -107,10 +144,32 @@ class DelayBoxPlot:
             title="Total Delay Distribution by Direction"
         )
 
-        fig.update_layout(
-            showlegend=False,
-            yaxis=dict(range=[0, 1000])
-        )
+        # Overlay planning durations
+        durations_df = self.compute_planning_durations()
+        band_df = self.compute_planning_band(durations_df)
+
+        for direction in df["Relation direction"].unique():
+            relation = self.get_relation_from_direction(direction)
+            if relation and relation in band_df["Relation"].values:
+                stats = band_df[band_df["Relation"] == relation].iloc[0]
+
+                if stats["Significant Variance"]:
+                    fig.add_hline(y=stats["min"], line_dash="dot", line_color="green",
+                                  annotation_text=f"{relation} Min Plan", annotation_position="top left")
+                    fig.add_hline(y=stats["mean"], line_dash="dash", line_color="blue",
+                                  annotation_text=f"{relation} Mean Plan", annotation_position="top left")
+                    fig.add_hline(y=stats["max"], line_dash="dot", line_color="red",
+                                  annotation_text=f"{relation} Max Plan", annotation_position="top left")
+                else:
+                    fig.add_hline(y=stats["mean"], line_dash="dash", line_color="blue",
+                                  annotation_text=f"{relation} Plan", annotation_position="top left")
+
+        # Adjust Y-axis range dynamically based on highest planned duration
+        max_planned = band_df["max"].max() if not band_df.empty else 1000
+        max_observed = df["Total Delay"].max()
+        y_max = max(max_planned, max_observed, 1000) * 1.1  # Add 10% buffer
+
+        fig.update_layout(showlegend=False, yaxis=dict(range=[0, y_max]))
         return fig
 
     def render_station_distribution_for_direction(self, direction: str):
@@ -148,37 +207,44 @@ class DelayBoxPlot:
         return fig
 
 
+
 class StationBoxPlot:
     """
-    Creates boxplots of total train delays (arrival + departure) by station.
+    Creates boxplots of total train delays (arrival + departure) by station,
+    with planning duration overlay.
     """
 
     def __init__(self, delay_data_path: str):
-        """
-        Initialize StationBoxPlot with delay data CSV.
-
-        Args:
-            delay_data_path (str): Path to the delay data CSV file.
-        """
         self.df = pd.read_csv(delay_data_path)
         self._clean_data()
 
     def _clean_data(self):
-        """
-        Prepares and cleans delay dataset for plotting.
-        """
         self.df["Delay at arrival"] = pd.to_numeric(self.df["Delay at arrival"], errors="coerce").fillna(0)
         self.df["Delay at departure"] = pd.to_numeric(self.df["Delay at departure"], errors="coerce").fillna(0)
         self.df["Stopping place (FR)"] = self.df["Stopping place (FR)"].astype(str).str.title()
         self.df["Total Delay"] = self.df["Delay at arrival"] + self.df["Delay at departure"]
+        self.df["Planned departure time"] = pd.to_datetime(self.df["Planned departure time"], errors="coerce", infer_datetime_format=True)
+        self.df["Planned arrival time"] = pd.to_datetime(self.df["Planned arrival time"], errors="coerce", infer_datetime_format=True)
+        self.df["Relation"] = self.df["Relation"].astype(str)
+        self.df["Train number"] = self.df["Train number"].astype(str)
+
+    def _compute_planning_durations(self):
+        df = self.df.dropna(subset=["Planned departure time", "Planned arrival time"]).copy()
+        df = df.sort_values(["Train number", "Planned departure time", "Planned arrival time"])
+
+        dep_df = df.groupby("Train number").first().reset_index()[["Train number", "Planned departure time", "Relation"]]
+        arr_df = df.groupby("Train number").last().reset_index()[["Train number", "Planned arrival time"]]
+        merged = pd.merge(dep_df, arr_df, on="Train number")
+        merged["Planned Duration (min)"] = (merged["Planned arrival time"] - merged["Planned departure time"]).dt.total_seconds() / 60.0
+
+        return merged
+
+    def _compute_planning_band(self, duration_df, threshold=5.0):
+        summary = duration_df.groupby("Relation")["Planned Duration (min)"].agg(["mean", "min", "max", "std"]).reset_index()
+        summary["Significant Variance"] = summary["std"] > threshold
+        return summary
 
     def render_boxplot(self, stations=None):
-        """
-        Render a Plotly boxplot for total delay by station.
-
-        Args:
-            stations (list, optional): List of stations to include. If None, auto-selects all available.
-        """
         df = self.df[self.df["Total Delay"] > 0].copy()
 
         if stations:
@@ -190,19 +256,40 @@ class StationBoxPlot:
             y="Total Delay",
             points="outliers",
             color="Stopping place (FR)",
-            labels={
-                "Stopping place (FR)": "Station",
-                "Total Delay": "Total Delay (minutes)"
-            },
+            labels={"Stopping place (FR)": "Station", "Total Delay": "Total Delay (minutes)"},
             title="Total Delay Distribution by Station"
         )
 
+        durations_df = self._compute_planning_durations()
+        band_df = self._compute_planning_band(durations_df)
+
+        max_y = max(df["Total Delay"].max(), band_df["max"].max() if not band_df.empty else 0) * 1.1
+
+        for rel in df["Relation"].unique():
+            if rel in band_df["Relation"].values:
+                stats = band_df[band_df["Relation"] == rel].iloc[0]
+                x_vals = df["Stopping place (FR)"].unique().tolist()
+
+                if stats["Significant Variance"]:
+                    fig.add_trace(go.Scatter(x=x_vals, y=[stats["min"]] * len(x_vals),
+                                             mode="lines", line=dict(color="green", dash="dot"),
+                                             name="Planned Min Duration"))
+                    fig.add_trace(go.Scatter(x=x_vals, y=[stats["mean"]] * len(x_vals),
+                                             mode="lines", line=dict(color="blue", dash="dash"),
+                                             name="Planned Mean Duration"))
+                    fig.add_trace(go.Scatter(x=x_vals, y=[stats["max"]] * len(x_vals),
+                                             mode="lines", line=dict(color="red", dash="dot"),
+                                             name="Planned Max Duration"))
+                else:
+                    fig.add_trace(go.Scatter(x=x_vals, y=[stats["mean"]] * len(x_vals),
+                                             mode="lines", line=dict(color="blue", dash="dash"),
+                                             name="Planned Duration"))
+
         fig.update_layout(
-            showlegend=False,
-            yaxis=dict(range=[0, 1000])
+            yaxis=dict(range=[0, max_y]),
+            legend=dict(title="Legend", orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         return fig
-
 
 
 import pandas as pd
