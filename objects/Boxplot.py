@@ -257,21 +257,22 @@ class LinkBoxPlot:
                 from_stop = group.loc[i, "Stopping place (FR)"]
                 to_stop = group.loc[i + 1, "Stopping place (FR)"]
 
-                # 🚫 Skip links where start and end station are the same
+                # 🚫 Skip self-links
                 if from_stop == to_stop:
                     continue
 
                 link_label = f"{from_stop} ➝ {to_stop}"
-                delay = group.loc[i + 1, "Total Delay"]
+                
+                # ✅ Use delay at arrival to next station to represent link delay
+                delay = group.loc[i + 1, "Delay at arrival"]
 
-                if delay > 0:
-                    records.append({
-                        "Train number": train_id,
-                        "From": from_stop,
-                        "To": to_stop,
-                        "Link": link_label,
-                        "Total Delay": delay
-                    })
+                records.append({
+                    "Train number": train_id,
+                    "From": from_stop,
+                    "To": to_stop,
+                    "Link": link_label,
+                    "Total Delay": delay
+                })
 
         return pd.DataFrame(records)
 
