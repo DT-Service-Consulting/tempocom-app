@@ -34,9 +34,16 @@ def load_delays():
         dtype={"Stopping place (FR)": "category", "Delay at arrival": "float32", "Delay at departure": "float32"}
     )
 
+
+
 @st.cache_data
 def load_boxplot_data():
-    return pd.read_csv(BOXPLOT_PATH)
+    df = pd.read_csv(BOXPLOT_PATH)
+    df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str).str.title()
+    df["Relation direction"] = df["Relation direction"].astype(str)
+    df["Train number"] = df["Train number"].astype(str)
+    return df
+
 
 @st.cache_data
 def load_station_data(path):
@@ -82,29 +89,34 @@ if "bubble_map1" not in st.session_state:
 if "heatmap" not in st.session_state:
     st.session_state.heatmap = DelayHeatmap(DELAY_PATH)
 
+boxplot_df = load_boxplot_data()
+
 if "direction_box" not in st.session_state:
-    st.session_state.direction_box = DelayBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading DelayBoxPlot..."):
+        st.session_state.direction_box = DelayBoxPlot(boxplot_df)
 
 if "station_box" not in st.session_state:
-    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading StationBoxPlot..."):
+        st.session_state.station_box = StationBoxPlot(boxplot_df)
 
 if "links_box" not in st.session_state:
-    st.session_state.links_box = LinkBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading LinkBoxPlot..."):
+        st.session_state.links_box = LinkBoxPlot(boxplot_df)
 
-
-
-if "station_box" not in st.session_state:
-    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)  # Choose a sensible default
-
-# Now safe to access
+# Local references
+direction_box = st.session_state.direction_box
 station_box = st.session_state.station_box
+link_box = st.session_state.links_box
+
+# Now assign local variables
+direction_box = st.session_state.direction_box
+station_box = st.session_state.station_box
+link_box = st.session_state.links_box
+
 
 bubble_map = st.session_state.bubble_map
 bubble_map1 = st.session_state.bubble_map1
 heatmap = st.session_state.heatmap
-direction_box = st.session_state.direction_box
-station_box = st.session_state.station_box
-link_box = st.session_state.links_box
 
 page = option_menu(
     menu_title=None,
