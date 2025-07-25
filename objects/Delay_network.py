@@ -44,26 +44,37 @@ class DelayBubbleMap:
     def __init__(self, conn):
         self.conn = conn
         self.merged = pd.DataFrame()
-
     def prepare_data(self, station_filter=None, date_filter=None):
-        date_str = date_filter.strftime('%Y-%m-%d') if date_filter else None
+        import ast  # ensure available here if used inside method
+        import pandas as pd
+
+        date_str = date_filter.strftime('%d-%m-%Y') if date_filter else None  # SQL Server stores as dd-MM-yyyy
+
         query = f"""
-        SELECT
-            op.Complete_name_in_French AS station,
-            op.Geo_Point AS geo_point,
-            SUM(pp.DELAY_ARR) / 60.0 AS Total_Delay_Minutes
-        FROM punctuality_public pp
-        JOIN operational_points op
-            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR) = op.PTCAR_ID
-        WHERE
-            pp.DELAY_ARR > 0
-            AND pp.REAL_DATE_ARR = '{date_str}'
-            AND op.Complete_name_in_French IS NOT NULL
-        GROUP BY op.Complete_name_in_French, op.Geo_Point
+            SELECT
+                op.Complete_name_in_French AS station,
+                op.Geo_Point AS geo_point,
+                SUM(pp.DELAY_ARR) / 60.0 AS Total_Delay_Minutes
+            FROM punctuality_public pp
+            JOIN operational_points op
+                ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
+            WHERE
+                pp.DELAY_ARR > 0
+                AND pp.REAL_DATE_DEP = '{date_str}'
+                AND op.Complete_name_in_French IS NOT NULL
+            GROUP BY op.Complete_name_in_French, op.Geo_Point
         """
+
+        print("SQL Query:\n", query)  # Debugging: check date format passed
 
         df = self.conn.query(query)
         df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
+
+        if df.empty:
+            print("⚠️ Query returned empty DataFrame.")
+            self.merged = pd.DataFrame()
+            return
+
         df['station'] = df['station'].str.strip().str.title()
 
         if station_filter:
@@ -73,9 +84,13 @@ class DelayBubbleMap:
         df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
         self.merged = df
 
+
     def render_map(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
+
+        # Ensure correct type
+        self.merged['Total_Delay_Minutes'] = self.merged['Total_Delay_Minutes'].astype(float)
 
         lats = [pt[0] for pt in self.merged['Geo_Point']]
         lons = [pt[1] for pt in self.merged['Geo_Point']]
@@ -105,12 +120,15 @@ class DelayBubbleMap:
         return m
 
 
+
+
+
 class DelayBubbleMap2:
     def __init__(self, conn):
         self.conn = conn
         self.merged = pd.DataFrame()
 
-    def prepare_data(self, station_filter=None, date_filter=None):
+    def prepare_data1(self, station_filter=None, date_filter=None):
         date_str = date_filter.strftime('%Y-%m-%d') if date_filter else None
         query = f"""
         SELECT
@@ -119,7 +137,7 @@ class DelayBubbleMap2:
             SUM(pp.DELAY_DEP) / 60.0 AS Total_Delay_Minutes
         FROM punctuality_public pp
         JOIN operational_points op
-            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR) = op.PTCAR_ID
+            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
         WHERE
             pp.DELAY_DEP > 0
             AND pp.REAL_DATE_DEP = '{date_str}'
@@ -127,19 +145,32 @@ class DelayBubbleMap2:
         GROUP BY op.Complete_name_in_French, op.Geo_Point
         """
 
-        df = self.conn.query(query)
-        df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
-        df['station'] = df['station'].str.strip().str.title()
+        try:
+            df = self.conn.query(query)
+            df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
+        except Exception as e:
+            print("Database error occurred:", e)
+            self.merged = pd.DataFrame()
+            return
 
+        if df.empty:
+            self.merged = pd.DataFrame()
+            return
+
+        df['station'] = df['station'].str.strip().str.title()
 
         if station_filter:
             station_filter = [s.strip().title() for s in station_filter]
             df = df[df['station'].isin(station_filter)]
 
         df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
+
+        # Ensure Total_Delay_Minutes is float
+        df['Total_Delay_Minutes'] = df['Total_Delay_Minutes'].astype(float)
+
         self.merged = df
 
-    def render_map(self):
+    def render_map1(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
@@ -169,6 +200,7 @@ class DelayBubbleMap2:
             ).add_to(m)
 
         return m
+
 
 
 

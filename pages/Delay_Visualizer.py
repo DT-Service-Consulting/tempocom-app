@@ -8,7 +8,7 @@ from objects.Delay_network import (
     DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain, DelayHourlyLinkTotalLineChart
 )
 from objects.Boxplot import DelayBoxPlot, StationBoxPlot ,LinkBoxPlot
-
+import time
 # GLOBAL LIBRAIRIES
 import importlib, sys, os
 from dotenv import load_dotenv
@@ -18,6 +18,7 @@ from pyspark.sql.functions import max as spark_max, min as spark_min, date_add, 
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.sql.window import Window
 import pyodbc
+import datetime
 from requests import get, Response
 from itertools import product
 from pyspark.sql.utils import AnalysisException
@@ -190,40 +191,41 @@ def load_all_stations(_conn):
 
 
 
-    if "Complete_name_in_French" not in df.columns:
-        st.error("❌ Column 'Complete_name_in_French' not found in result!")
-        return []
 
-    cleaned = (
-        df["Complete_name_in_French"]
-        .dropna()
-        .astype(str)
-        .map(clean_station_name)
-        .drop_duplicates()
-        .sort_values()
-        .tolist()
-    )
+import datetime
+import streamlit as st
+from objects.Delay_network import DelayBubbleMap  # Assuming you use this class
+# Assume dbc is your DB connection
 
-    
-    return cleaned
+import datetime
+import streamlit as st
+from objects.Delay_network import DelayBubbleMap
 
+# --- Session state init ---
+if 'bubble_map' not in st.session_state:
+    st.session_state['bubble_map'] = DelayBubbleMap(dbc)
+
+if 'bubble_map2' not in st.session_state:
+    st.session_state['bubble_map2'] = DelayBubbleMap2(dbc)
+
+if 'maps_ready' not in st.session_state:
+    st.session_state['maps_ready'] = False
+
+if 'station_list' not in st.session_state:
+    st.session_state['station_list'] = load_all_stations(dbc)
+
+# --- UI begins ---
 if page == "Dashboard Tab":
-    selected_date = st.date_input("🗕️ Choose Day")
+    default_date = datetime.date(2024, 1, 16)
+    selected_date = st.date_input("🗕️ Choose Day", value=default_date)
+
     st.markdown("### 🗘️ Bubble Map Filters")
-    
 
-
-        # Load station list from DB
-    station_list = load_all_stations(dbc)
-
-    # Get cluster filter
     selected_cluster = st.radio("📍 Quick Select Cluster", options=list(clusters.keys()), key="bubble_cluster_selector")
     cluster_stations = clusters[selected_cluster]
-
-    # Filter cluster stations to ones present in DB list
+    station_list = st.session_state['station_list']
     default_stations = [s for s in cluster_stations if s in station_list]
 
-    # Multiselect UI
     selected_stations = st.multiselect(
         "🏢 Choose Stations for Bubble Maps",
         options=station_list,
@@ -231,26 +233,33 @@ if page == "Dashboard Tab":
         key="bubble_map_station_select"
     )
 
-
-    # 🔁 Update data based on filters
+    # --- Update button ---
     if st.button("🔁 Update Maps"):
-        bubble_map_stations = selected_stations
+        st.session_state['bubble_map'].prepare_data(
+            station_filter=selected_stations,
+            date_filter=selected_date
+        )
+        st.session_state['bubble_map2'].prepare_data1(
+            station_filter=selected_stations,
+            date_filter=selected_date
+        )
+        st.session_state['maps_ready'] = True
 
-        bubble_map.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
-        bubble_map1.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
-        st.session_state.maps_ready = True
+    # --- Conditional rendering ---
+    if st.session_state['maps_ready']:
+        st.markdown("### 🗺️ Arrival Delay Bubble Map")
+        st_folium(
+            st.session_state['bubble_map'].render_map(),
+            width=700, height=500, key="arr_map"
+        )
 
-    # 📍 Show Bubble Maps if ready
-    if st.session_state.get("maps_ready"):
-        st.subheader("📍 Delay Bubble Maps")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Departure Delays")
-            st_folium(bubble_map1.render_map(), width=700, height=500, key="dep_map")
-        with col2:
-            st.markdown("#### Arrival Delays")
-            st_folium(bubble_map.render_map(), width=700, height=500, key="arr_map")
-
+        st.markdown("### 🗺️ Departure Delay Bubble Map")
+        st_folium(
+            st.session_state['bubble_map2'].render_map1(),
+            width=700, height=500, key="dep_map"
+        )
+    else:
+        st.info("👆 Click '🔁 Update Maps' to load and display arrival/departure bubble maps.")
 
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
 elif page == "Analytics Tab":
