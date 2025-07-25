@@ -234,6 +234,8 @@ if page == "Dashboard Tab":
 
     # 🔁 Update data based on filters
     if st.button("🔁 Update Maps"):
+        bubble_map_stations = selected_stations
+
         bubble_map.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
         bubble_map1.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
         st.session_state.maps_ready = True
