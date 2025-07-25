@@ -9,6 +9,40 @@ from objects.Delay_network import (
 )
 from objects.Boxplot import DelayBoxPlot, StationBoxPlot ,LinkBoxPlot
 
+# GLOBAL LIBRAIRIES
+import importlib, sys, os
+from dotenv import load_dotenv
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import count_distinct, col, length, avg, monotonically_increasing_id, row_number, concat_ws, try_to_timestamp
+from pyspark.sql.functions import max as spark_max, min as spark_min, date_add, date_sub, to_date, date_format, upper, to_timestamp, when, lit
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+from pyspark.sql.window import Window
+import pyodbc
+from requests import get, Response
+from itertools import product
+from pyspark.sql.utils import AnalysisException
+print(pyodbc.drivers())
+
+# SETTING THE ENVIRONMENT
+sys.path.append('../TEMPOCOM-APP')
+load_dotenv('../tempocom_config/.env')
+
+# LOCAL LIBRAIRIES
+from utils import *
+from modules import DBConnector
+
+# INITIALIZATION
+spark = (
+    SparkSession.builder
+        .appName("WriteToAzureSQL")
+        # latest GA driver as of mid-2025 – change version if a newer one appears
+        .config("spark.jars.packages", "com.microsoft.sqlserver:mssql-jdbc:10.2.1.jre11")
+        .getOrCreate()
+)
+
+
+dbc = DBConnector()
+
 # Paths
 MART_PATH = os.getenv("MART_RELATIVE_PATH")
 STATIONS_PATH = f"{MART_PATH}/public/stations.csv"
@@ -34,9 +68,16 @@ def load_delays():
         dtype={"Stopping place (FR)": "category", "Delay at arrival": "float32", "Delay at departure": "float32"}
     )
 
+
+
 @st.cache_data
 def load_boxplot_data():
-    return pd.read_csv(BOXPLOT_PATH)
+    df = pd.read_csv(BOXPLOT_PATH)
+    df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str).str.title()
+    df["Relation direction"] = df["Relation direction"].astype(str)
+    df["Train number"] = df["Train number"].astype(str)
+    return df
+
 
 @st.cache_data
 def load_station_data(path):
@@ -74,37 +115,43 @@ clusters = {
 }
 
 if "bubble_map" not in st.session_state:
-    st.session_state.bubble_map = DelayBubbleMap(STATIONS_PATH, DELAY_PATH)
+   st.session_state.bubble_map = DelayBubbleMap(dbc)
 
 if "bubble_map1" not in st.session_state:
-    st.session_state.bubble_map1 = DelayBubbleMap2(STATIONS_PATH, DELAY_PATH)
+    st.session_state.bubble_map1 = DelayBubbleMap2(dbc)
+
 
 if "heatmap" not in st.session_state:
     st.session_state.heatmap = DelayHeatmap(DELAY_PATH)
 
+boxplot_df = load_boxplot_data()
+
 if "direction_box" not in st.session_state:
-    st.session_state.direction_box = DelayBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading DelayBoxPlot..."):
+        st.session_state.direction_box = DelayBoxPlot(boxplot_df)
 
 if "station_box" not in st.session_state:
-    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading StationBoxPlot..."):
+        st.session_state.station_box = StationBoxPlot(boxplot_df)
 
 if "links_box" not in st.session_state:
-    st.session_state.links_box = LinkBoxPlot(BOXPLOT_PATH)
+    with st.spinner("Loading LinkBoxPlot..."):
+        st.session_state.links_box = LinkBoxPlot(boxplot_df)
 
-
-
-if "station_box" not in st.session_state:
-    st.session_state.station_box = StationBoxPlot(BOXPLOT_PATH)  # Choose a sensible default
-
-# Now safe to access
+# Local references
+direction_box = st.session_state.direction_box
 station_box = st.session_state.station_box
+link_box = st.session_state.links_box
+
+# Now assign local variables
+direction_box = st.session_state.direction_box
+station_box = st.session_state.station_box
+link_box = st.session_state.links_box
+
 
 bubble_map = st.session_state.bubble_map
 bubble_map1 = st.session_state.bubble_map1
 heatmap = st.session_state.heatmap
-direction_box = st.session_state.direction_box
-station_box = st.session_state.station_box
-link_box = st.session_state.links_box
 
 page = option_menu(
     menu_title=None,
@@ -113,56 +160,95 @@ page = option_menu(
     orientation="horizontal"
 )
 
+
+####################################################################################################################################################
+
+
+
+@st.cache_data
+def load_all_stations(_conn):
+    query = """
+    SELECT DISTINCT Complete_name_in_French
+    FROM operational_points
+    WHERE Complete_name_in_French IS NOT NULL
+    """
+    raw_results = _conn.query(query)
+
+    # Handle list of dicts like: [{'Short_name_in_French': 'Namur'}, ...]
+    names = []
+    for row in raw_results:
+        try:
+            raw_name = row.get('Complete_name_in_French', '')
+            cleaned = " ".join(raw_name.strip().title().split())
+            if cleaned:
+                names.append(cleaned)
+        except Exception as e:
+            print(f"⚠️ Failed to clean row: {row} — {e}")
+
+    return sorted(set(names))  # remove duplicates, sort alphabetically
+
+
+
+
+    if "Complete_name_in_French" not in df.columns:
+        st.error("❌ Column 'Complete_name_in_French' not found in result!")
+        return []
+
+    cleaned = (
+        df["Complete_name_in_French"]
+        .dropna()
+        .astype(str)
+        .map(clean_station_name)
+        .drop_duplicates()
+        .sort_values()
+        .tolist()
+    )
+
+    
+    return cleaned
+
 if page == "Dashboard Tab":
     selected_date = st.date_input("🗕️ Choose Day")
     st.markdown("### 🗘️ Bubble Map Filters")
+    
+
+
+        # Load station list from DB
+    station_list = load_all_stations(dbc)
+
+    # Get cluster filter
     selected_cluster = st.radio("📍 Quick Select Cluster", options=list(clusters.keys()), key="bubble_cluster_selector")
     cluster_stations = clusters[selected_cluster]
 
-    all_stations_in_data = sorted(pd.read_csv(STATIONS_PATH)["Name_FR"].dropna().unique())
-    bubble_map_stations = st.multiselect(
+    # Filter cluster stations to ones present in DB list
+    default_stations = [s for s in cluster_stations if s in station_list]
+
+    # Multiselect UI
+    selected_stations = st.multiselect(
         "🏢 Choose Stations for Bubble Maps",
-        options=all_stations_in_data,
-        default=cluster_stations,
+        options=station_list,
+        default=default_stations,
         key="bubble_map_station_select"
     )
 
+
+    # 🔁 Update data based on filters
     if st.button("🔁 Update Maps"):
         bubble_map.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
-        bubble_map1.prepare_data1(station_filter=bubble_map_stations, date_filter=selected_date)
+        bubble_map1.prepare_data(station_filter=bubble_map_stations, date_filter=selected_date)
         st.session_state.maps_ready = True
 
+    # 📍 Show Bubble Maps if ready
     if st.session_state.get("maps_ready"):
         st.subheader("📍 Delay Bubble Maps")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("#### Departure Delays")
-            st_folium(bubble_map1.render_map1(), width=700, height=500, key="dep_map")
+            st_folium(bubble_map1.render_map(), width=700, height=500, key="dep_map")
         with col2:
             st.markdown("#### Arrival Delays")
             st_folium(bubble_map.render_map(), width=700, height=500, key="arr_map")
 
-    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
-        st.markdown("### 🌟 Heatmap Filters")
-        all_stations_in_data = sorted(stations_df["Name_FR"].dropna().astype(str).str.strip().str.title().unique())
-        heatmap_cluster = st.radio("📍 Quick Select Cluster for Heatmaps", options=list(clusters.keys()), key="heatmap_cluster_selector")
-        heatmap_default = clusters[heatmap_cluster]
-
-        heatmap_stations = st.multiselect("Choose stations for heatmaps", options=all_stations_in_data, default=heatmap_default, key="heatmap_station_select")
-
-        if st.button("Render Heatmaps"):
-            heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
-            col3, col4 = st.columns(2)
-            with col3:
-                st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=False))
-
-            heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
-            with col4:
-                st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=True))
 
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
 elif page == "Analytics Tab":

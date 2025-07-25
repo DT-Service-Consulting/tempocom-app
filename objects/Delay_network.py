@@ -37,41 +37,41 @@ import pandas as pd
 import folium
 import ast
 
-class DelayBubbleMap:
-    def __init__(self, stations_path: str, delay_data_path: str):
-        self.stations = pd.read_csv(stations_path)
-        self.delays = pd.read_csv(delay_data_path)
+import folium
+import ast
 
+class DelayBubbleMap:
+    def __init__(self, conn):
+        self.conn = conn
+        self.merged = pd.DataFrame()
 
     def prepare_data(self, station_filter=None, date_filter=None):
-        self.delays = self.delays[self.delays['Delay at arrival'] > 0].copy()
+        date_str = date_filter.strftime('%Y-%m-%d') if date_filter else None
+        query = f"""
+        SELECT
+            op.Complete_name_in_French AS station,
+            op.Geo_Point AS geo_point,
+            SUM(pp.DELAY_ARR) / 60.0 AS Total_Delay_Minutes
+        FROM punctuality_public pp
+        JOIN operational_points op
+            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR) = op.PTCAR_ID
+        WHERE
+            pp.DELAY_ARR > 0
+            AND pp.REAL_DATE_ARR = '{date_str}'
+            AND op.Complete_name_in_French IS NOT NULL
+        GROUP BY op.Complete_name_in_French, op.Geo_Point
+        """
 
-        self.delays['Actual arrival time'] = pd.to_datetime(self.delays['Actual arrival time'], errors='coerce')
-        if date_filter:
-            self.delays = self.delays[self.delays['Actual arrival time'].dt.date == date_filter]
-
-        self.delay_summary = (
-            self.delays.groupby('Stopping place (FR)')['Delay at arrival']
-            .sum()
-            .div(60)
-            .reset_index()
-            .rename(columns={'Delay at arrival': 'Total_Delay_Minutes'})
-        )
-
-        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
-        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
+        df = self.conn.query(query)
+        df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
+        df['station'] = df['station'].str.strip().str.title()
 
         if station_filter:
             station_filter = [s.strip().title() for s in station_filter]
-            self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
+            df = df[df['station'].isin(station_filter)]
 
-        self.merged = self.delay_summary.merge(
-            self.stations[['Name_FR', 'Geo_Point']],
-            left_on='Stopping place (FR)',
-            right_on='Name_FR',
-            how='inner'
-        )
-        self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
+        df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
+        self.merged = df
 
     def render_map(self):
         if self.merged.empty:
@@ -91,59 +91,55 @@ class DelayBubbleMap:
             return f"#{r:02x}{g:02x}00"
 
         for _, row in self.merged.iterrows():
-            delay_min = row['Total_Delay_Minutes']
-            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
-            radius = 3 + norm * 12
-
+            radius = 3 + ((row['Total_Delay_Minutes'] - min_delay) / (max_delay - min_delay + 1e-6)) * 12
             folium.CircleMarker(
                 location=row['Geo_Point'],
                 radius=radius,
-                color=delay_to_color(delay_min),
+                color=delay_to_color(row['Total_Delay_Minutes']),
                 fill=True,
-                fill_color=delay_to_color(delay_min),
+                fill_color=delay_to_color(row['Total_Delay_Minutes']),
                 fill_opacity=0.7,
-                popup=f"{row['Name_FR']}<br>Arrival Delay: {round(delay_min, 1)} min"
+                popup=f"{row['station']}<br>Arrival Delay: {round(row['Total_Delay_Minutes'], 1)} min"
             ).add_to(m)
 
         return m
 
 
 class DelayBubbleMap2:
-    def __init__(self, stations_path: str, delay_data_path: str):
-        self.stations = pd.read_csv(stations_path)
-        self.delays = pd.read_csv(delay_data_path)
+    def __init__(self, conn):
+        self.conn = conn
+        self.merged = pd.DataFrame()
 
-    def prepare_data1(self, station_filter=None, date_filter=None):
-        self.delays = self.delays[self.delays['Delay at departure'] > 0].copy()
+    def prepare_data(self, station_filter=None, date_filter=None):
+        date_str = date_filter.strftime('%Y-%m-%d') if date_filter else None
+        query = f"""
+        SELECT
+            op.Complete_name_in_French AS station,
+            op.Geo_Point AS geo_point,
+            SUM(pp.DELAY_DEP) / 60.0 AS Total_Delay_Minutes
+        FROM punctuality_public pp
+        JOIN operational_points op
+            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR) = op.PTCAR_ID
+        WHERE
+            pp.DELAY_DEP > 0
+            AND pp.REAL_DATE_DEP = '{date_str}'
+            AND op.Complete_name_in_French IS NOT NULL
+        GROUP BY op.Complete_name_in_French, op.Geo_Point
+        """
 
-        self.delays['Actual departure time'] = pd.to_datetime(
-            self.delays['Actual departure time'], format="%Y-%m-%d %H:%M:%S", errors='coerce'
-        )
-        if date_filter:
-            self.delays = self.delays[self.delays['Actual departure time'].dt.date == date_filter]
+        df = self.conn.query(query)
+        df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
+        df['station'] = df['station'].str.strip().str.title()
 
-        self.delay_summary = (
-            self.delays.groupby('Stopping place (FR)')['Delay at departure']
-            .sum().div(60).reset_index()
-            .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
-        )
-
-        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
-        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
 
         if station_filter:
             station_filter = [s.strip().title() for s in station_filter]
-            self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
+            df = df[df['station'].isin(station_filter)]
 
-        self.merged = self.delay_summary.merge(
-            self.stations[['Name_FR', 'Geo_Point']],
-            left_on='Stopping place (FR)',
-            right_on='Name_FR',
-            how='inner'
-        )
-        self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
+        df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
+        self.merged = df
 
-    def render_map1(self):
+    def render_map(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
@@ -161,21 +157,21 @@ class DelayBubbleMap2:
             return f"#{r:02x}{g:02x}00"
 
         for _, row in self.merged.iterrows():
-            delay_min = row['Total_Delay_Minutes']
-            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
-            radius = 3 + norm * 12
-
+            radius = 3 + ((row['Total_Delay_Minutes'] - min_delay) / (max_delay - min_delay + 1e-6)) * 12
             folium.CircleMarker(
                 location=row['Geo_Point'],
                 radius=radius,
-                color=delay_to_color(delay_min),
+                color=delay_to_color(row['Total_Delay_Minutes']),
                 fill=True,
-                fill_color=delay_to_color(delay_min),
+                fill_color=delay_to_color(row['Total_Delay_Minutes']),
                 fill_opacity=0.7,
-                popup=f"{row['Name_FR']}<br>Departure Delay: {round(delay_min, 1)} min"
+                popup=f"{row['station']}<br>Departure Delay: {round(row['Total_Delay_Minutes'], 1)} min"
             ).add_to(m)
 
         return m
+
+
+
 
 
 
@@ -336,78 +332,6 @@ class DelayLineChart:
 
         return fig
 
-import pandas as pd
-import folium
-import ast
-
-class DelayBubbleMap2:
-    def __init__(self, stations_path: str, delay_data_path: str):
-        self.stations = pd.read_csv(stations_path)
-        self.delays = pd.read_csv(delay_data_path)
-
-    def prepare_data1(self, station_filter=None, date_filter=None):
-        self.delays = self.delays[self.delays['Delay at departure'] > 0].copy()
-
-        self.delays['Actual departure time'] = pd.to_datetime(self.delays['Actual departure time'], errors='coerce')
-        if date_filter:
-            self.delays = self.delays[self.delays['Actual departure time'].dt.date == date_filter]
-
-        self.delay_summary = (
-            self.delays.groupby('Stopping place (FR)')['Delay at departure']
-            .sum()
-            .div(60)
-            .reset_index()
-            .rename(columns={'Delay at departure': 'Total_Delay_Minutes'})
-        )
-
-        self.delay_summary['Stopping place (FR)'] = self.delay_summary['Stopping place (FR)'].str.strip().str.title()
-        self.stations['Name_FR'] = self.stations['Name_FR'].astype(str).str.strip().str.title()
-
-        if station_filter:
-            station_filter = [s.strip().title() for s in station_filter]
-            self.delay_summary = self.delay_summary[self.delay_summary['Stopping place (FR)'].isin(station_filter)]
-
-        self.merged = self.delay_summary.merge(
-            self.stations[['Name_FR', 'Geo_Point']],
-            left_on='Stopping place (FR)',
-            right_on='Name_FR',
-            how='inner'
-        )
-        self.merged['Geo_Point'] = self.merged['Geo_Point'].apply(ast.literal_eval)
-
-    def render_map1(self):
-        if self.merged.empty:
-            return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
-
-        lats = [pt[0] for pt in self.merged['Geo_Point']]
-        lons = [pt[1] for pt in self.merged['Geo_Point']]
-        m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
-
-        delays = self.merged['Total_Delay_Minutes']
-        min_delay, max_delay = delays.min(), delays.max()
-
-        def delay_to_color(delay):
-            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
-            r = int(255 * norm)
-            g = int(255 * (1 - norm))
-            return f"#{r:02x}{g:02x}00"
-
-        for _, row in self.merged.iterrows():
-            delay_min = row['Total_Delay_Minutes']
-            norm = (delay_min - min_delay) / (max_delay - min_delay + 1e-6)
-            radius = 3 + norm * 12
-
-            folium.CircleMarker(
-                location=row['Geo_Point'],
-                radius=radius,
-                color=delay_to_color(delay_min),
-                fill=True,
-                fill_color=delay_to_color(delay_min),
-                fill_opacity=0.7,
-                popup=f"{row['Name_FR']}<br>Departure Delay: {round(delay_min, 1)} min"
-            ).add_to(m)
-
-        return m
 
 
 
