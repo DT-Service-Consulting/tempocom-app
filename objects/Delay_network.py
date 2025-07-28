@@ -202,75 +202,86 @@ class DelayBubbleMap2:
     
 
     
-class DelayHeatmap:
-    def __init__(self, delay_data_path):
-        self.delay_data_path = delay_data_path
-
-    def load_and_prepare(self, arrival=False, date_filter=None):
-            df = pd.read_csv(self.delay_data_path)
-            delay_col = "Delay at arrival" if arrival else "Delay at departure"
-            time_col = "Actual arrival time" if arrival else "Actual departure time"
-
-            df[delay_col] = pd.to_numeric(df[delay_col], errors="coerce")
-            df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
-            df[time_col] = pd.to_datetime(df[time_col], format="%Y-%m-%d %H:%M:%S", errors="coerce")
-
-            if date_filter:
-                # Ensure date_filter is a datetime.date
-                if isinstance(date_filter, pd.Timestamp):
-                    date_filter = date_filter.date()
-                    df = df[df[time_col].dt.date == date_filter]
-
-            df["Hour"] = df[time_col].dt.hour
-            df = df.dropna(subset=["Hour", delay_col])
-            self.df = df
 
 
-    def filter_and_prepare_heatmap(self, arrival=False, station_filter=None, top_n=10):
-            df = self.df.copy()
-            delay_col = "Delay at arrival" if arrival else "Delay at departure"
+class DelayHeatmapDB:
+    def __init__(self, conn, date_filter):
+        """
+        :param conn: pyodbc connection or SQLAlchemy engine (connected to SQL Server)
+        :param date_filter: datetime.date object
+        """
+        self.conn = conn
+        self.date_filter = pd.to_datetime(date_filter).date()
 
-            if station_filter:
-                station_filter = [s.title() for s in station_filter]
-                df = df[df["Stopping place (FR)"].isin(station_filter)]
+    def query_delay_data(self, arrival=False, station_filter=None):
+        """
+        Query delay data from the database, optionally filtered by arrival/departure and station.
+        :return: DataFrame with columns: delay, time, station_name, Hour
+        """
+        delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
+        time_col = "REAL_DATE_ARR" if arrival else "REAL_DATE_DEP"
 
-            df["StopLabel"] = df["Stopping place (FR)"].str.title()
+        # Format date as 'YYYYMMDD' for SQL Server safety
+        date_str = self.date_filter.strftime('%d-%m-%Y')
 
-            top_stations = (
-                df.groupby("StopLabel")[delay_col]
-                .sum()
-                .div(60)
-                .sort_values(ascending=False)
-                .head(top_n)
-                .index
-            )
+        sql = f"""
+        SELECT 
+            p.{delay_col} AS delay,
+            p.{time_col} AS time,
+            op.Complete_name_in_French AS station_name
+        FROM punctuality_public p
+        JOIN operational_points op 
+            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
+        WHERE 
+             p.{time_col} = '{date_str}'
+        """
 
-            df_top = df[df["StopLabel"].isin(top_stations)]
+        # Add station filter manually
+        formatted_stations = ["'" + s.title().replace("'", "''") + "'" for s in station_filter]
+        in_clause = ", ".join(formatted_stations)
+        sql += f"AND op.Complete_name_in_French IN ({in_clause})"
+           
 
-            heatmap_data = (
-                df_top.groupby(["StopLabel", "Hour"])[delay_col]
-                .sum()
-                .reset_index()
-            )
+        # Execute query
+        print("Executing SQL Query:\n", sql)  # Debugging: check the final query
+        df = pd.read_sql_query(sql, self.conn)
 
-            pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values=delay_col).fillna(0)
-            pivot["Total"] = pivot.sum(axis=1)
-            self.pivot_table = pivot.sort_values("Total", ascending=False).drop(columns="Total")
+        # Clean and enrich
+        df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
+        df["Hour"] = pd.to_datetime(df["time"], errors="coerce").dt.hour
+        df["station_name"] = df["station_name"].astype(str).str.strip().str.title()
+        print(df.head())  # Show top rows
+        print(f"✅ Query returned {len(df)} rows.")
 
-    def render_heatmap(self, arrival=False):
-        if self.pivot_table is None:
-            raise ValueError("Run filter_and_prepare_heatmap() first.")
+        return df.dropna(subset=["delay", "Hour", "station_name"])
 
+    def create_pivot(self, df):
+        """
+        Create a pivot table: rows = station, columns = hour, values = total delay (minutes)
+        """
+        grouped = (
+            df.groupby(["station_name", "Hour"])["delay"]
+            .sum()
+            .div(60)  # convert to minutes
+            .reset_index()
+        )
+
+        pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
+        pivot["Total"] = pivot.sum(axis=1)
+        return pivot.sort_values("Total", ascending=False).drop(columns="Total").head(10)
+
+    def render_heatmap(self, pivot_table, arrival=False):
+        """
+        Plot a heatmap from a pivot table.
+        """
         title = "Arrival" if arrival else "Departure"
         return px.imshow(
-            self.pivot_table,
+            pivot_table,
             labels=dict(x="Hour", y="Station", color="Total Delay (min)"),
             aspect="auto",
             color_continuous_scale="YlOrRd",
             title=f"{title} Delay Heatmap (Top 10 Stations)"
         )
-
-
 
 
 
@@ -363,70 +374,6 @@ class DelayLineChart:
 
 
 
-
-class DelayHeatmap:
-    def __init__(self, delay_data_path):
-        self.delay_data_path = delay_data_path
-
-    def load_and_prepare(self, arrival=False, date_filter=None):
-        df = pd.read_csv(self.delay_data_path)
-        delay_col = "Delay at arrival" if arrival else "Delay at departure"
-        time_col = "Actual arrival time" if arrival else "Actual departure time"
-
-        df[delay_col] = pd.to_numeric(df[delay_col], errors="coerce")
-        df["Stopping place (FR)"] = df["Stopping place (FR)"].astype(str)
-        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
-
-        if date_filter:
-            df = df[df[time_col].dt.date == date_filter]
-
-        df["Hour"] = df[time_col].dt.hour
-        df = df.dropna(subset=["Hour", delay_col])
-        self.df = df
-
-    def filter_and_prepare_heatmap(self, arrival=False, station_filter=None, top_n=10):
-        df = self.df.copy()
-        delay_col = "Delay at arrival" if arrival else "Delay at departure"
-
-        if station_filter:
-            station_filter = [s.title() for s in station_filter]
-            df = df[df["Stopping place (FR)"].isin(station_filter)]
-
-        df["StopLabel"] = df["Stopping place (FR)"].str.title()
-
-        top_stations = (
-            df.groupby("StopLabel")[delay_col]
-            .sum()
-            .div(60)
-            .sort_values(ascending=False)
-            .head(top_n)
-            .index
-        )
-
-        df_top = df[df["StopLabel"].isin(top_stations)]
-
-        heatmap_data = (
-            df_top.groupby(["StopLabel", "Hour"])[delay_col]
-            .sum()
-            .reset_index()
-        )
-
-        pivot = heatmap_data.pivot(index="StopLabel", columns="Hour", values=delay_col).fillna(0)
-        pivot["Total"] = pivot.sum(axis=1)
-        self.pivot_table = pivot.sort_values("Total", ascending=False).drop(columns="Total")
-
-    def render_heatmap(self, arrival=False):
-        if self.pivot_table is None:
-            raise ValueError("Run filter_and_prepare_heatmap() first.")
-
-        title = "Arrival" if arrival else "Departure"
-        return px.imshow(
-            self.pivot_table,
-            labels=dict(x="Hour", y="Station", color="Total Delay (min)"),
-            aspect="auto",
-            color_continuous_scale="YlOrRd",
-            title=f"{title} Delay Heatmap (Top 10 Stations)"
-        )
 
 
 

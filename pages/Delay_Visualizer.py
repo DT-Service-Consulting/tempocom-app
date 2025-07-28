@@ -4,7 +4,7 @@ import pandas as pd
 from streamlit_folium import st_folium
 from streamlit_option_menu import option_menu
 from objects.Delay_network import (
-    DelayBubbleMap, DelayBubbleMap2, DelayHeatmap,
+    DelayBubbleMap, DelayBubbleMap2, DelayHeatmapDB,
     DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain, DelayHourlyLinkTotalLineChart
 )
 from objects.Boxplot import DelayBoxPlot, StationBoxPlot ,LinkBoxPlot
@@ -22,6 +22,9 @@ import datetime
 from requests import get, Response
 from itertools import product
 from pyspark.sql.utils import AnalysisException
+from sqlalchemy.engine import Engine
+
+
 print(pyodbc.drivers())
 
 # SETTING THE ENVIRONMENT
@@ -122,8 +125,6 @@ if "bubble_map1" not in st.session_state:
     st.session_state.bubble_map1 = DelayBubbleMap2(dbc)
 
 
-if "heatmap" not in st.session_state:
-    st.session_state.heatmap = DelayHeatmap(DELAY_PATH)
 
 boxplot_df = load_boxplot_data()
 
@@ -152,7 +153,7 @@ link_box = st.session_state.links_box
 
 bubble_map = st.session_state.bubble_map
 bubble_map1 = st.session_state.bubble_map1
-heatmap = st.session_state.heatmap
+
 
 page = option_menu(
     menu_title=None,
@@ -190,12 +191,6 @@ def load_all_stations(_conn):
 
 
 
-
-
-import datetime
-import streamlit as st
-from objects.Delay_network import DelayBubbleMap  # Assuming you use this class
-# Assume dbc is your DB connection
 
 import datetime
 import streamlit as st
@@ -264,10 +259,12 @@ if page == "Dashboard Tab":
     else:
         st.info("👆 Click '🔁 Update Maps' to load and display arrival/departure bubble maps.")
 
-    # ----------------------- Delay Heatmap Section -----------------------
+
+# ----------------------- Delay Heatmap Section -----------------------
     with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
         st.markdown("### 🌟 Heatmap Filters")
 
+        # Assumes stations_df is preloaded from operational_points
         all_stations_in_data = sorted(
             stations_df["Name_FR"]
             .dropna()
@@ -292,20 +289,33 @@ if page == "Dashboard Tab":
         )
 
         if st.button("Render Heatmaps"):
-            # Departure Heatmap
-            heatmap.load_and_prepare(arrival=False)
-            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
-            col3, col4 = st.columns(2)
-            with col3:
-                st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=False))
+            st.info("⏳ Querying database and rendering heatmaps...")
 
-            # Arrival Heatmap
-            heatmap.load_and_prepare(arrival=True)
-            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
+            heatmap_db = DelayHeatmapDB(dbc.conn, selected_date)
+
+            col3, col4 = st.columns(2)
+
+            # ---- DEPARTURE HEATMAP ----
+            with col3:
+                df_dep = heatmap_db.query_delay_data(arrival=False, station_filter=heatmap_stations)
+                if not df_dep.empty:
+                    pivot_dep = heatmap_db.create_pivot(df_dep)
+                    fig_dep = heatmap_db.render_heatmap(pivot_dep, arrival=False)
+                    st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                    st.plotly_chart(fig_dep)
+                else:
+                    st.warning("No departure delay data found for selected date/stations.")
+
+            # ---- ARRIVAL HEATMAP ----
             with col4:
-                st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=True))
+                df_arr = heatmap_db.query_delay_data(arrival=True, station_filter=heatmap_stations)
+                if not df_arr.empty:
+                    pivot_arr = heatmap_db.create_pivot(df_arr)
+                    fig_arr = heatmap_db.render_heatmap(pivot_arr, arrival=True)
+                    st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                    st.plotly_chart(fig_arr)
+                else:
+                    st.warning("No arrival delay data found for selected date/stations.")
 
 
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
