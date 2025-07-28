@@ -239,7 +239,7 @@ if page == "Dashboard Tab":
             station_filter=selected_stations,
             date_filter=selected_date
         )
-        st.session_state['bubble_map2'].prepare_data1(
+        st.session_state['bubble_map2'].prepare_data(
             station_filter=selected_stations,
             date_filter=selected_date
         )
@@ -255,7 +255,7 @@ if page == "Dashboard Tab":
 
         st.markdown("### 🗺️ Departure Delay Bubble Map")
         st_folium(
-            st.session_state['bubble_map2'].render_map1(),
+            st.session_state['bubble_map2'].render_map(),
             width=700, height=500, key="dep_map"
         )
     else:

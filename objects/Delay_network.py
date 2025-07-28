@@ -122,14 +122,15 @@ class DelayBubbleMap:
 
 
 
-
 class DelayBubbleMap2:
     def __init__(self, conn):
         self.conn = conn
         self.merged = pd.DataFrame()
 
-    def prepare_data1(self, station_filter=None, date_filter=None):
-        date_str = date_filter.strftime('%Y-%m-%d') if date_filter else None
+    def prepare_data(self, station_filter=None, date_filter=None):
+        # ✅ Format the date to match 'dd-MM-yyyy' as used in the DB
+        date_str = date_filter.strftime('%d-%m-%Y') if date_filter else None
+
         query = f"""
         SELECT
             op.Complete_name_in_French AS station,
@@ -164,13 +165,11 @@ class DelayBubbleMap2:
             df = df[df['station'].isin(station_filter)]
 
         df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
-
-        # Ensure Total_Delay_Minutes is float
         df['Total_Delay_Minutes'] = df['Total_Delay_Minutes'].astype(float)
 
         self.merged = df
 
-    def render_map1(self):
+    def render_map(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
@@ -200,13 +199,9 @@ class DelayBubbleMap2:
             ).add_to(m)
 
         return m
+    
 
-
-
-
-
-
-
+    
 class DelayHeatmap:
     def __init__(self, delay_data_path):
         self.delay_data_path = delay_data_path
