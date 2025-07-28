@@ -214,12 +214,12 @@ if 'maps_ready' not in st.session_state:
 if 'station_list' not in st.session_state:
     st.session_state['station_list'] = load_all_stations(dbc)
 
-# --- UI begins ---
 if page == "Dashboard Tab":
     default_date = datetime.date(2024, 1, 16)
     selected_date = st.date_input("🗕️ Choose Day", value=default_date)
 
-    st.markdown("### 🗘️ Bubble Map Filters")
+    # ----------------------- Bubble Map Section -----------------------
+    st.markdown("## 🗘️ Bubble Map Filters")
 
     selected_cluster = st.radio("📍 Quick Select Cluster", options=list(clusters.keys()), key="bubble_cluster_selector")
     cluster_stations = clusters[selected_cluster]
@@ -232,29 +232,7 @@ if page == "Dashboard Tab":
         default=default_stations,
         key="bubble_map_station_select"
     )
-    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
-        st.markdown("### 🌟 Heatmap Filters")
-        all_stations_in_data = sorted(stations_df["Name_FR"].dropna().astype(str).str.strip().str.title().unique())
-        heatmap_cluster = st.radio("📍 Quick Select Cluster for Heatmaps", options=list(clusters.keys()), key="heatmap_cluster_selector")
-        heatmap_default = clusters[heatmap_cluster]
 
-        heatmap_stations = st.multiselect("Choose stations for heatmaps", options=all_stations_in_data, default=heatmap_default, key="heatmap_station_select")
-
-        if st.button("Render Heatmaps"):
-            heatmap.load_and_prepare(arrival=False, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
-            col3, col4 = st.columns(2)
-            with col3:
-                st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=False))
-
-            heatmap.load_and_prepare(arrival=True, date_filter=selected_date)
-            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
-            with col4:
-                st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
-                st.plotly_chart(heatmap.render_heatmap(arrival=True))
-
-    # --- Update button ---
     if st.button("🔁 Update Maps"):
         st.session_state['bubble_map'].prepare_data(
             station_filter=selected_stations,
@@ -266,21 +244,69 @@ if page == "Dashboard Tab":
         )
         st.session_state['maps_ready'] = True
 
-    # --- Conditional rendering ---
-    if st.session_state['maps_ready']:
-        st.markdown("### 🗺️ Arrival Delay Bubble Map")
-        st_folium(
-            st.session_state['bubble_map'].render_map(),
-            width=700, height=500, key="arr_map"
-        )
+    if st.session_state.get('maps_ready', False):
+        st.markdown("### 🗺️ Delay Bubble Maps")
+        col1, col2 = st.columns(2)
 
-        st.markdown("### 🗺️ Departure Delay Bubble Map")
-        st_folium(
-            st.session_state['bubble_map2'].render_map(),
-            width=700, height=500, key="dep_map"
-        )
+        with col1:
+            st.markdown("#### Arrival Delay")
+            st_folium(
+                st.session_state['bubble_map'].render_map(),
+                width=600, height=500, key="arr_map"
+            )
+
+        with col2:
+            st.markdown("#### Departure Delay")
+            st_folium(
+                st.session_state['bubble_map2'].render_map(),
+                width=600, height=500, key="dep_map"
+            )
     else:
         st.info("👆 Click '🔁 Update Maps' to load and display arrival/departure bubble maps.")
+
+    # ----------------------- Delay Heatmap Section -----------------------
+    with st.expander("🔥 Delay Heatmaps (Top 10 Stations)"):
+        st.markdown("### 🌟 Heatmap Filters")
+
+        all_stations_in_data = sorted(
+            stations_df["Name_FR"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.title()
+            .unique()
+        )
+
+        heatmap_cluster = st.radio(
+            "📍 Quick Select Cluster for Heatmaps",
+            options=list(clusters.keys()),
+            key="heatmap_cluster_selector"
+        )
+        heatmap_default = clusters[heatmap_cluster]
+
+        heatmap_stations = st.multiselect(
+            "Choose stations for heatmaps",
+            options=all_stations_in_data,
+            default=heatmap_default,
+            key="heatmap_station_select"
+        )
+
+        if st.button("Render Heatmaps"):
+            # Departure Heatmap
+            heatmap.load_and_prepare(arrival=False)
+            heatmap.filter_and_prepare_heatmap(arrival=False, station_filter=heatmap_stations)
+            col3, col4 = st.columns(2)
+            with col3:
+                st.markdown(f"#### Departure Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                st.plotly_chart(heatmap.render_heatmap(arrival=False))
+
+            # Arrival Heatmap
+            heatmap.load_and_prepare(arrival=True)
+            heatmap.filter_and_prepare_heatmap(arrival=True, station_filter=heatmap_stations)
+            with col4:
+                st.markdown(f"#### Arrival Heatmap for {selected_date.strftime('%Y-%m-%d')}")
+                st.plotly_chart(heatmap.render_heatmap(arrival=True))
+
 
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
 elif page == "Analytics Tab":
