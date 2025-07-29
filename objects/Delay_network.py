@@ -219,22 +219,25 @@ class DelayHeatmapDB:
         :return: DataFrame with columns: delay, time, station_name, Hour
         """
         delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
-        time_col = "REAL_DATE_ARR" if arrival else "REAL_DATE_DEP"
+        time_col = "PLANNED_DATETIME_ARR" if arrival else "PLANNED_DATETIME_DEP"
 
         # Format date as 'YYYYMMDD' for SQL Server safety
         date_str = self.date_filter.strftime('%d-%m-%Y')
 
         sql = f"""
-        SELECT 
-            p.{delay_col} AS delay,
-            p.{time_col} AS time,
-            op.Complete_name_in_French AS station_name
-        FROM punctuality_public p
-        JOIN operational_points op 
-            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-        WHERE 
-             p.{time_col} = '{date_str}'
-        """
+            SELECT 
+                p.{delay_col} AS delay,
+                p.{time_col} AS time,
+                DATEPART(HOUR, TRY_CAST(p.{time_col} AS DATETIME)) AS Hour,
+                op.Complete_name_in_French AS station_name
+            FROM punctuality_public p
+            JOIN operational_points op 
+                ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
+            WHERE 
+                TRY_CONVERT(DATE, p.{time_col}) = '{date_str}'
+            """
+
+
 
         # Add station filter manually
         formatted_stations = ["'" + s.title().replace("'", "''") + "'" for s in station_filter]
@@ -250,25 +253,43 @@ class DelayHeatmapDB:
         df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
         df["Hour"] = pd.to_datetime(df["time"], errors="coerce").dt.hour
         df["station_name"] = df["station_name"].astype(str).str.strip().str.title()
+        df = df.dropna(subset=["delay", "Hour", "station_name"])
         print(df.head())  # Show top rows
-        print(f"✅ Query returned {len(df)} rows.")
+        
 
         return df.dropna(subset=["delay", "Hour", "station_name"])
 
     def create_pivot(self, df):
         """
-        Create a pivot table: rows = station, columns = hour, values = total delay (minutes)
+        Create a pivot table: rows = station, columns = hour (0-23), values = total delay (minutes).
+        Ensures all 24 hours are included in the x-axis.
         """
+        # Group and sum
         grouped = (
             df.groupby(["station_name", "Hour"])["delay"]
             .sum()
-            .div(60)  # convert to minutes
+            .div(60)  # Convert to minutes
             .reset_index()
         )
 
+        # Pivot
         pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
+
+        # Ensure all 24 hours (0–23) are present
+        all_hours = list(range(24))
+        for h in all_hours:
+            if h not in pivot.columns:
+                pivot[h] = 0
+
+        # Sort columns numerically by hour
+        pivot = pivot[sorted(pivot.columns)]
+
+        # Sort rows by total delay
         pivot["Total"] = pivot.sum(axis=1)
-        return pivot.sort_values("Total", ascending=False).drop(columns="Total").head(10)
+        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total").head(10)
+
+        return pivot
+
 
     def render_heatmap(self, pivot_table, arrival=False):
         """
