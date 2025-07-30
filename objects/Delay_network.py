@@ -45,25 +45,25 @@ class DelayBubbleMap:
         self.conn = conn
         self.merged = pd.DataFrame()
     def prepare_data(self, station_filter=None, date_filter=None):
-        import ast  # ensure available here if used inside method
-        import pandas as pd
+       
+        delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
+        time_col = "REAL_DATE_ARR" if arrival else "REAL_DATE_DEP"
 
-        date_str = date_filter.strftime('%d-%m-%Y') if date_filter else None  # SQL Server stores as dd-MM-yyyy
+        # Format date as 'YYYYMMDD' for SQL Server safety
+        date_str = self.date_filter.strftime('%d-%m-%Y')
 
-        query = f"""
-            SELECT
-                op.Complete_name_in_French AS station,
-                op.Geo_Point AS geo_point,
-                SUM(pp.DELAY_ARR) / 60.0 AS Total_Delay_Minutes
-            FROM punctuality_public pp
-            JOIN operational_points op
-                ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-            WHERE
-                pp.DELAY_ARR > 0
-                AND pp.REAL_DATE_DEP = '{date_str}'
-                AND op.Complete_name_in_French IS NOT NULL
-            GROUP BY op.Complete_name_in_French, op.Geo_Point
+        sql = f"""
+        SELECT 
+            p.{delay_col} AS delay,
+            p.{time_col} AS time,
+            op.Complete_name_in_French AS station_name
+        FROM punctuality_public p
+        JOIN operational_points op 
+            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
+        WHERE 
+             p.{time_col} = '{date_str}'
         """
+        query = sql
 
         print("SQL Query:\n", query)  # Debugging: check date format passed
 
@@ -221,21 +221,28 @@ class DelayHeatmapDB:
         delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
         time_col = "PLANNED_DATETIME_ARR" if arrival else "PLANNED_DATETIME_DEP"
 
-        # Format date as 'YYYYMMDD' for SQL Server safety
-        date_str = self.date_filter.strftime('%d-%m-%Y')
+        date_str = self.date_filter.strftime("%Y-%m-%d")
 
         sql = f"""
-            SELECT 
-                p.{delay_col} AS delay,
-                p.{time_col} AS time,
-                DATEPART(HOUR, TRY_CAST(p.{time_col} AS DATETIME)) AS Hour,
-                op.Complete_name_in_French AS station_name
-            FROM punctuality_public p
-            JOIN operational_points op 
-                ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-            WHERE 
-                TRY_CONVERT(DATE, p.{time_col}) = '{date_str}'
-            """
+        SELECT 
+            p.{delay_col} AS delay,
+            p.{time_col} AS time,
+            CASE 
+                WHEN TRY_CAST(p.{time_col} AS DATETIME) IS NOT NULL 
+                THEN DATEPART(HOUR, TRY_CAST(p.{time_col} AS DATETIME))
+                ELSE NULL
+            END AS Hour,
+            op.Complete_name_in_French AS station_name
+        FROM punctuality_public p
+        JOIN operational_points op 
+            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
+        WHERE 
+            TRY_CONVERT(DATE, p.{time_col}) = '{date_str}'
+        """
+
+
+
+
 
 
 
@@ -251,9 +258,10 @@ class DelayHeatmapDB:
 
         # Clean and enrich
         df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
-        df["Hour"] = pd.to_datetime(df["time"], errors="coerce").dt.hour
         df["station_name"] = df["station_name"].astype(str).str.strip().str.title()
         df = df.dropna(subset=["delay", "Hour", "station_name"])
+       
+      
         print(df.head())  # Show top rows
         
 
