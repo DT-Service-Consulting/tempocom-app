@@ -229,11 +229,12 @@ if page == "Dashboard Tab":
     )
 
     if st.button("🔁 Update Maps"):
-        st.session_state['bubble_map'].prepare_data(
+        st.session_state['bubble_map'].prepare_data( arrival=True,
             station_filter=selected_stations,
             date_filter=selected_date
         )
         st.session_state['bubble_map2'].prepare_data(
+    
             station_filter=selected_stations,
             date_filter=selected_date
         )
@@ -297,7 +298,7 @@ if page == "Dashboard Tab":
 
             # ---- DEPARTURE HEATMAP ----
             with col3:
-                df_dep = heatmap_db.query_delay_data(arrival=False, station_filter=heatmap_stations)
+                df_dep = heatmap_db.query_delay_data(station_filter=heatmap_stations)
                 if not df_dep.empty:
                     pivot_dep = heatmap_db.create_pivot(df_dep)
                     fig_dep = heatmap_db.render_heatmap(pivot_dep, arrival=False)

@@ -39,82 +39,211 @@ import ast
 
 import folium
 import ast
+import datetime
+import datetime
+import re
+from typing import Iterable, Optional, Tuple, Union
+
+import pandas as pd
+import folium
+
+
+DateLike = Union[str, datetime.date, datetime.datetime]
+DateRange = Tuple[DateLike, DateLike]
+
+
+import datetime
+import re
+from typing import Iterable, Optional, Tuple, Union
+
+import datetime, re, math
+from typing import Iterable, Optional, Tuple, Union
+import numpy as np
+import pandas as pd
+import folium
+
+DateLike = Union[str, datetime.date, datetime.datetime]
+DateRange = Tuple[DateLike, DateLike]
 
 class DelayBubbleMap:
-    def __init__(self, conn):
+    """
+    One bubble per station (by default) with size ~ delay.
+    Optionally, jitter overlapping points to see multiple records.
+    """
+
+    def __init__(self, conn,
+                 min_radius: float = 4.0,
+                 max_radius: float = 28.0,
+                 aggregate: bool = True,   # <— DEFAULT: aggregate to one circle per station
+                 agg_metric: str = "p90",  # mean|median|max|sum|p90
+                 jitter_meters: float = 0.0):  # set to e.g. 30 to separate stacked points ~30m
         self.conn = conn
         self.merged = pd.DataFrame()
-    def prepare_data(self, station_filter=None, date_filter=None):
-       
+        self.min_radius = float(min_radius)
+        self.max_radius = float(max_radius)
+        self.aggregate = bool(aggregate)
+        self.agg_metric = agg_metric.lower()
+        self.jitter_meters = float(jitter_meters)
+
+    # ------------- helpers -------------
+    @staticmethod
+    def _to_ymd(d: DateLike) -> str:
+        if isinstance(d, datetime.datetime): d = d.date()
+        if isinstance(d, datetime.date): return d.strftime("%Y-%m-%d")
+        s = str(d).strip().replace("/", "-")
+        m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", s)  # dd-mm-yyyy
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else s
+
+    @staticmethod
+    def _parse_geo_point(val) -> Optional[tuple]:
+        if val is None or (isinstance(val, float) and pd.isna(val)): return None
+        s = str(val)
+        m = re.search(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", s)
+        return (float(m.group(1)), float(m.group(2))) if m else None
+
+    @staticmethod
+    def _casefold_in(series: pd.Series, candidates: Iterable[str]) -> pd.Series:
+        cand = {str(x).casefold().strip() for x in candidates}
+        return series.astype("string").str.casefold().isin(cand)
+
+    @staticmethod
+    def _agg_func(name: str):
+        name = name.lower()
+        if name == "mean": return "mean"
+        if name == "median": return "median"
+        if name == "max": return "max"
+        if name == "sum": return "sum"
+        if name == "p90": return lambda s: float(pd.to_numeric(s, errors="coerce").quantile(0.90))
+        raise ValueError("agg_metric must be one of mean|median|max|sum|p90")
+
+    @staticmethod
+    def _jitter_point(pt: Tuple[float, float], meters: float, seed: Optional[int] = None) -> Tuple[float, float]:
+        """Randomly offset a lat/lon by ~meters in both directions."""
+        if meters <= 0: return pt
+        rng = np.random.default_rng(seed)
+        lat, lon = float(pt[0]), float(pt[1])
+        # ~1 deg lat ≈ 111_111 m; 1 deg lon ≈ 111_111 * cos(lat)
+        dlat = (rng.uniform(-1, 1) * meters) / 111_111.0
+        denom = 111_111.0 * max(1e-6, math.cos(math.radians(lat)))
+        dlon = (rng.uniform(-1, 1) * meters) / denom
+        return lat + dlat, lon + dlon
+
+    # ------------- core -------------
+    def prepare_data(
+        self,
+        arrival: bool = True,
+        station_filter: Optional[Union[str, Iterable[str]]] = None,
+        date_filter: Optional[Union[DateLike, DateRange]] = None,
+    ):
         delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
-        time_col = "REAL_DATE_ARR" if arrival else "REAL_DATE_DEP"
+        time_col  = "REAL_DATE_ARR" if arrival else "REAL_DATE_DEP"
 
-        # Format date as 'YYYYMMDD' for SQL Server safety
-        date_str = self.date_filter.strftime('%d-%m-%Y')
+        # date handling
+        if date_filter is None:
+            start_date = end_date = datetime.date.today()
+        elif isinstance(date_filter, (tuple, list)) and len(date_filter) == 2:
+            start_date, end_date = date_filter
+        else:
+            start_date = end_date = date_filter
+        ymd_start, ymd_end = self._to_ymd(start_date), self._to_ymd(end_date)
 
+        # int-to-int join; pull Geo_Point + station name in one go
         sql = f"""
-        SELECT 
-            p.{delay_col} AS delay,
+        SELECT
+            CAST(p.{delay_col} AS FLOAT) / 60.0 AS Total_Delay_Minutes,
             p.{time_col} AS time,
-            op.Complete_name_in_French AS station_name
-        FROM punctuality_public p
-        JOIN operational_points op 
-            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-        WHERE 
-             p.{time_col} = '{date_str}'
+            op.Complete_name_in_French AS station,
+            op.Geo_Point AS Geo_Point
+        FROM punctuality_public AS p
+        INNER JOIN operational_points AS op
+            ON p.STOPPING_PLACE_ID = op.PTCAR_ID
+        WHERE p.{time_col} BETWEEN '{ymd_start}' AND '{ymd_end}'
         """
-        query = sql
-
-        print("SQL Query:\n", query)  # Debugging: check date format passed
-
-        df = self.conn.query(query)
-        df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
-
+        raw = self.conn.query(sql)
+        df = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame(
+            raw, columns=["Total_Delay_Minutes", "time", "station", "Geo_Point"]
+        )
         if df.empty:
-            print("⚠️ Query returned empty DataFrame.")
             self.merged = pd.DataFrame()
             return
 
-        df['station'] = df['station'].str.strip().str.title()
+        # types + cleanup
+        df["Total_Delay_Minutes"] = pd.to_numeric(df["Total_Delay_Minutes"], errors="coerce")
+        df["station"] = df["station"].astype("string").str.strip().str.title()
+        df["Geo_Point"] = df["Geo_Point"].apply(self._parse_geo_point)
+        df = df.dropna(subset=["Total_Delay_Minutes", "Geo_Point", "station"])
+        if df.empty:
+            self.merged = pd.DataFrame()
+            return
 
+        # optional station filter
         if station_filter:
-            station_filter = [s.strip().title() for s in station_filter]
-            df = df[df['station'].isin(station_filter)]
+            if isinstance(station_filter, str): station_filter = [station_filter]
+            df = df[self._casefold_in(df["station"], station_filter)]
+            if df.empty:
+                self.merged = pd.DataFrame()
+                return
 
-        df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
-        self.merged = df
+        # KEY FIX: collapse stacked points (same lat/lon) to ONE bubble per station
+        if self.aggregate:
+            func = self._agg_func(self.agg_metric)
+            df = (df.groupby(["station", "Geo_Point"], as_index=False)
+                    .agg(Total_Delay_Minutes=("Total_Delay_Minutes", func),
+                         n=("Total_Delay_Minutes", "size")))
+        else:
+            # optional jitter to separate overlapping markers slightly
+            if self.jitter_meters > 0:
+                # use a deterministic seed per row so map is stable between reruns
+                df = df.copy()
+                df["Geo_Point"] = [self._jitter_point(pt, self.jitter_meters, seed=i)
+                                   for i, pt in enumerate(df["Geo_Point"])]
 
+        # sort so **smaller** circles draw first, **larger** last (visible on top)
+        df = df.sort_values("Total_Delay_Minutes")
+        self.merged = df[["station", "Geo_Point", "Total_Delay_Minutes"]].reset_index(drop=True)
 
     def render_map(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-        # Ensure correct type
-        self.merged['Total_Delay_Minutes'] = self.merged['Total_Delay_Minutes'].astype(float)
+        df = self.merged.copy()
+        delays = pd.to_numeric(df["Total_Delay_Minutes"], errors="coerce")
+        df = df.loc[delays.notna()]
+        if df.empty:
+            return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-        lats = [pt[0] for pt in self.merged['Geo_Point']]
-        lons = [pt[1] for pt in self.merged['Geo_Point']]
-        m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
+        lats = [pt[0] for pt in df["Geo_Point"]]
+        lons = [pt[1] for pt in df["Geo_Point"]]
+        center = (float(np.mean(lats)), float(np.mean(lons)))
+        m = folium.Map(location=center, zoom_start=7, tiles="cartodb positron")
 
-        delays = self.merged['Total_Delay_Minutes']
-        min_delay, max_delay = delays.min(), delays.max()
+        d = df["Total_Delay_Minutes"].to_numpy(dtype=float)
+        dmin, dmax = float(np.nanmin(d)), float(np.nanmax(d))
+        if not math.isfinite(dmin) or not math.isfinite(dmax) or dmax <= dmin:
+            dmax = dmin + 1e-6  # avoid collapse
 
-        def delay_to_color(delay):
-            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
-            r = int(255 * norm)
-            g = int(255 * (1 - norm))
+        # strict linear mapping: delay -> radius
+        sizes = np.interp(d, (dmin, dmax), (self.min_radius, self.max_radius)).astype(float)
+
+        # simple green->red by absolute delay
+        span = (dmax - dmin) if (dmax - dmin) != 0 else 1e-6
+        def color_for(val: float) -> str:
+            t = (val - dmin) / span
+            r = int(255 * t); g = int(255 * (1 - t))
             return f"#{r:02x}{g:02x}00"
 
-        for _, row in self.merged.iterrows():
-            radius = 3 + ((row['Total_Delay_Minutes'] - min_delay) / (max_delay - min_delay + 1e-6)) * 12
+        # draw in ascending size so bigger bubbles end up on top
+        for (station, (lat, lon), delay_min, radius) in zip(
+            df["station"], df["Geo_Point"], d, sizes
+        ):
             folium.CircleMarker(
-                location=row['Geo_Point'],
-                radius=radius,
-                color=delay_to_color(row['Total_Delay_Minutes']),
+                location=(float(lat), float(lon)),
+                radius=float(radius),
+                color=color_for(float(delay_min)),
                 fill=True,
-                fill_color=delay_to_color(row['Total_Delay_Minutes']),
+                fill_color=color_for(float(delay_min)),
                 fill_opacity=0.7,
-                popup=f"{row['station']}<br>Arrival Delay: {round(row['Total_Delay_Minutes'], 1)} min"
+                popup=f"{station}<br>Delay: {round(float(delay_min), 1)} min"
             ).add_to(m)
 
         return m
@@ -122,33 +251,119 @@ class DelayBubbleMap:
 
 
 
+import datetime, re, math, numpy as np, pandas as pd, folium
+from typing import Optional, Union, Iterable, Tuple
+
+DateLike   = Union[str, datetime.date, datetime.datetime]
+DateRange  = Tuple[DateLike, DateLike]
+
 class DelayBubbleMap2:
-    def __init__(self, conn):
+    """
+    Delay bubble map (departure delays).
+    - One bubble per station by default (aggregate=True, agg_metric='p90').
+    - Optional jitter to separate overlapping points if you want every record.
+    - Circle size strictly proportional to delay (linear min..max).
+    """
+
+    def __init__(self, conn,
+                 min_radius: float = 4.0,
+                 max_radius: float = 28.0,
+                 aggregate: bool = True,
+                 agg_metric: str = "p90",   # mean|median|max|sum|p90
+                 jitter_meters: float = 0.0):
         self.conn = conn
         self.merged = pd.DataFrame()
+        self.min_radius = float(min_radius)
+        self.max_radius = float(max_radius)
+        self.aggregate = bool(aggregate)
+        self.agg_metric = str(agg_metric).lower()
+        self.jitter_meters = float(jitter_meters)
 
-    def prepare_data(self, station_filter=None, date_filter=None):
-        # ✅ Format the date to match 'dd-MM-yyyy' as used in the DB
-        date_str = date_filter.strftime('%d-%m-%Y') if date_filter else None
+    # ---------- helpers ----------
+    @staticmethod
+    def _to_ymd(d: DateLike) -> str:
+        """Return YYYY-MM-DD for SQL date comparisons."""
+        if isinstance(d, datetime.datetime):
+            d = d.date()
+        if isinstance(d, datetime.date):
+            return d.strftime("%Y-%m-%d")
+        s = str(d).strip().replace("/", "-")
+        # dd-mm-yyyy → yyyy-mm-dd
+        m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", s)
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else s
 
-        query = f"""
+    @staticmethod
+    def _parse_geo_point(val) -> Optional[tuple]:
+        """Parse 'lat, lon' string → (lat, lon) floats."""
+        if val is None or (isinstance(val, float) and pd.isna(val)): return None
+        s = str(val)
+        m = re.search(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", s)
+        return (float(m.group(1)), float(m.group(2))) if m else None
+
+    @staticmethod
+    def _casefold_in(series: pd.Series, candidates: Iterable[str]) -> pd.Series:
+        cand = {str(x).casefold().strip() for x in candidates}
+        return series.astype("string").str.casefold().isin(cand)
+
+    @staticmethod
+    def _agg_func(name: str):
+        name = name.lower()
+        if name == "mean":   return "mean"
+        if name == "median": return "median"
+        if name == "max":    return "max"
+        if name == "sum":    return "sum"
+        if name == "p90":    return lambda s: float(pd.to_numeric(s, errors="coerce").quantile(0.90))
+        raise ValueError("agg_metric must be one of mean|median|max|sum|p90")
+
+    @staticmethod
+    def _jitter_point(pt: Tuple[float, float], meters: float, seed: Optional[int] = None) -> Tuple[float, float]:
+        """Randomly offset a lat/lon by ~meters to separate overlapping markers."""
+        if meters <= 0: return pt
+        rng = np.random.default_rng(seed)
+        lat, lon = float(pt[0]), float(pt[1])
+        # 1 deg lat ≈ 111_111 m; 1 deg lon ≈ 111_111 * cos(lat)
+        dlat = (rng.uniform(-1, 1) * meters) / 111_111.0
+        denom = 111_111.0 * max(1e-6, math.cos(math.radians(lat)))
+        dlon = (rng.uniform(-1, 1) * meters) / denom
+        return lat + dlat, lon + dlon
+
+    # ---------- core ----------
+    def prepare_data(self, station_filter: Optional[Union[str, Iterable[str]]] = None,
+                     date_filter: Optional[Union[DateLike, DateRange]] = None):
+        """
+        Build self.merged with columns: station, Geo_Point, Total_Delay_Minutes.
+        - date_filter can be a single date or a (start, end) tuple.
+        - Always uses DELAY_DEP and REAL_DATE_DEP.
+        """
+        # date handling
+        if date_filter is None:
+            start_date = end_date = datetime.date.today()
+        elif isinstance(date_filter, (tuple, list)) and len(date_filter) == 2:
+            start_date, end_date = date_filter
+        else:
+            start_date = end_date = date_filter
+        ymd_start, ymd_end = self._to_ymd(start_date), self._to_ymd(end_date)
+
+        # Pull row-level delays; do NOT sum in SQL so we can aggregate flexibly here.
+        sql = f"""
         SELECT
+            CAST(p.DELAY_DEP AS FLOAT) / 60.0 AS Total_Delay_Minutes,
+            p.REAL_DATE_DEP AS time,
             op.Complete_name_in_French AS station,
-            op.Geo_Point AS geo_point,
-            SUM(pp.DELAY_DEP) / 60.0 AS Total_Delay_Minutes
-        FROM punctuality_public pp
-        JOIN operational_points op
-            ON CAST(pp.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-        WHERE
-            pp.DELAY_DEP > 0
-            AND pp.REAL_DATE_DEP = '{date_str}'
-            AND op.Complete_name_in_French IS NOT NULL
-        GROUP BY op.Complete_name_in_French, op.Geo_Point
+            op.Geo_Point AS Geo_Point
+        FROM punctuality_public AS p
+        INNER JOIN operational_points AS op
+            ON p.STOPPING_PLACE_ID = op.PTCAR_ID
+        WHERE p.DELAY_DEP > 0
+          AND p.REAL_DATE_DEP BETWEEN '{ymd_start}' AND '{ymd_end}'
+          AND op.Complete_name_in_French IS NOT NULL
         """
 
         try:
-            df = self.conn.query(query)
-            df = pd.DataFrame(df, columns=['station', 'geo_point', 'Total_Delay_Minutes'])
+            raw = self.conn.query(sql)
+            df = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame(
+                raw, columns=["Total_Delay_Minutes", "time", "station", "Geo_Point"]
+            )
         except Exception as e:
             print("Database error occurred:", e)
             self.merged = pd.DataFrame()
@@ -158,159 +373,244 @@ class DelayBubbleMap2:
             self.merged = pd.DataFrame()
             return
 
-        df['station'] = df['station'].str.strip().str.title()
+        # types + cleanup
+        df["Total_Delay_Minutes"] = pd.to_numeric(df["Total_Delay_Minutes"], errors="coerce")
+        df["station"] = df["station"].astype("string").str.strip().str.title()
+        df["Geo_Point"] = df["Geo_Point"].apply(self._parse_geo_point)
+        df = df.dropna(subset=["Total_Delay_Minutes", "Geo_Point", "station"])
+        if df.empty:
+            self.merged = pd.DataFrame()
+            return
 
+        # optional station filter
         if station_filter:
-            station_filter = [s.strip().title() for s in station_filter]
-            df = df[df['station'].isin(station_filter)]
+            if isinstance(station_filter, str):
+                station_filter = [station_filter]
+            df = df[self._casefold_in(df["station"], station_filter)]
+            if df.empty:
+                self.merged = pd.DataFrame()
+                return
 
-        df['Geo_Point'] = df['geo_point'].apply(ast.literal_eval)
-        df['Total_Delay_Minutes'] = df['Total_Delay_Minutes'].astype(float)
+        # collapse stacked points (same lat/lon) → one bubble per station
+        if self.aggregate:
+            func = self._agg_func(self.agg_metric)
+            df = (df.groupby(["station", "Geo_Point"], as_index=False)
+                    .agg(Total_Delay_Minutes=("Total_Delay_Minutes", func),
+                         n=("Total_Delay_Minutes", "size")))
+        else:
+            # or jitter to separate multiples visually
+            if self.jitter_meters > 0:
+                df = df.copy()
+                df["Geo_Point"] = [self._jitter_point(pt, self.jitter_meters, seed=i)
+                                   for i, pt in enumerate(df["Geo_Point"])]
 
-        self.merged = df
+        # small → big so larger bubbles draw on top
+        df = df.sort_values("Total_Delay_Minutes")
+        self.merged = df[["station", "Geo_Point", "Total_Delay_Minutes"]].reset_index(drop=True)
 
     def render_map(self):
         if self.merged.empty:
             return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-        lats = [pt[0] for pt in self.merged['Geo_Point']]
-        lons = [pt[1] for pt in self.merged['Geo_Point']]
-        m = folium.Map(location=(sum(lats)/len(lats), sum(lons)/len(lons)), zoom_start=7, tiles="cartodb positron")
+        df = self.merged.copy()
+        df["Total_Delay_Minutes"] = pd.to_numeric(df["Total_Delay_Minutes"], errors="coerce")
+        df = df.dropna(subset=["Total_Delay_Minutes", "Geo_Point", "station"])
+        if df.empty:
+            return folium.Map(location=(50.8503, 4.3517), zoom_start=7, tiles="cartodb positron")
 
-        delays = self.merged['Total_Delay_Minutes']
-        min_delay, max_delay = delays.min(), delays.max()
+        # center
+        lats = [pt[0] for pt in df["Geo_Point"]]
+        lons = [pt[1] for pt in df["Geo_Point"]]
+        m = folium.Map(location=(float(np.mean(lats)), float(np.mean(lons))),
+                       zoom_start=7, tiles="cartodb positron")
 
-        def delay_to_color(delay):
-            norm = (delay - min_delay) / (max_delay - min_delay + 1e-6)
-            r = int(255 * norm)
-            g = int(255 * (1 - norm))
+        # strict linear size mapping
+        d = df["Total_Delay_Minutes"].to_numpy(dtype=float)
+        dmin, dmax = float(np.nanmin(d)), float(np.nanmax(d))
+        if not math.isfinite(dmin) or not math.isfinite(dmax) or dmax <= dmin:
+            dmax = dmin + 1e-6
+        sizes = np.interp(d, (dmin, dmax), (self.min_radius, self.max_radius)).astype(float)
+
+        # color: green (low) → red (high)
+        span = (dmax - dmin) if (dmax - dmin) != 0 else 1e-6
+        def color_for(val: float) -> str:
+            t = (val - dmin) / span
+            r = int(255 * t); g = int(255 * (1 - t))
             return f"#{r:02x}{g:02x}00"
 
-        for _, row in self.merged.iterrows():
-            radius = 3 + ((row['Total_Delay_Minutes'] - min_delay) / (max_delay - min_delay + 1e-6)) * 12
+        for (station, (lat, lon), delay_min, radius) in zip(
+            df["station"], df["Geo_Point"], d, sizes
+        ):
             folium.CircleMarker(
-                location=row['Geo_Point'],
-                radius=radius,
-                color=delay_to_color(row['Total_Delay_Minutes']),
+                location=(float(lat), float(lon)),
+                radius=float(radius),
+                color=color_for(float(delay_min)),
                 fill=True,
-                fill_color=delay_to_color(row['Total_Delay_Minutes']),
+                fill_color=color_for(float(delay_min)),
                 fill_opacity=0.7,
-                popup=f"{row['station']}<br>Departure Delay: {round(row['Total_Delay_Minutes'], 1)} min"
+                popup=f"{station}<br>Delay: {round(float(delay_min), 1)} min"
             ).add_to(m)
 
         return m
-    
 
-    
+import datetime
+import pandas as pd
+import plotly.express as px
+import re
+from typing import Optional, Union, Iterable, Tuple
 
+DateLike  = Union[str, datetime.date, datetime.datetime]
+DateRange = Tuple[DateLike, DateLike]
 
 class DelayHeatmapDB:
-    def __init__(self, conn, date_filter):
+    def __init__(self, conn, date_filter,
+                 arrival: bool = False,          # match bubblemap default (DEP)
+                 agg_metric: str = "p90",        # p90 | median | mean | max | sum
+                 by_hour: bool = False):         # False => 1 column (like bubble’s station aggregate)
         """
-        :param conn: pyodbc connection or SQLAlchemy engine (connected to SQL Server)
-        :param date_filter: datetime.date object
+        :param conn: DB connection/engine
+        :param date_filter: date or (start, end)
         """
         self.conn = conn
-        self.date_filter = pd.to_datetime(date_filter).date()
+        self.arrival = bool(arrival)
+        self.agg_metric = agg_metric.lower()
+        self.by_hour = bool(by_hour)
 
-    def query_delay_data(self, arrival=False, station_filter=None):
+        # accept single date or (start, end)
+        if isinstance(date_filter, (tuple, list)) and len(date_filter) == 2:
+            self.start_date = pd.to_datetime(date_filter[0]).date()
+            self.end_date   = pd.to_datetime(date_filter[1]).date()
+        else:
+            d = pd.to_datetime(date_filter).date()
+            self.start_date = d
+            self.end_date   = d
+
+    @staticmethod
+    def _to_ymd(d: DateLike) -> str:
+        if isinstance(d, datetime.datetime):
+            d = d.date()
+        if isinstance(d, datetime.date):
+            return d.strftime("%Y-%m-%d")
+        s = str(d).strip().replace("/", "-")
+        m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", s)  # dd-mm-yyyy
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else s
+
+    @staticmethod
+    def _agg_func(name: str):
+        name = name.lower()
+        if name == "mean":   return "mean"
+        if name == "median": return "median"
+        if name == "max":    return "max"
+        if name == "sum":    return "sum"
+        if name == "p90":    return lambda s: float(pd.to_numeric(s, errors="coerce").quantile(0.90))
+        raise ValueError("agg_metric must be one of: p90|median|mean|max|sum")
+
+    def query_delay_data(self, station_filter: Optional[Iterable[str]] = None):
         """
-        Query delay data from the database, optionally filtered by arrival/departure and station.
-        :return: DataFrame with columns: delay, time, station_name, Hour
+        Pull delays (in MINUTES), aligned with bubble map:
+        - Use DELAY_DEP (or DELAY_ARR if arrival=True)  [seconds in DB → minutes here]
+        - Filter by REAL_DATE_DEP/ARR for date range
+        - Join STOPPING_PLACE_ID ↔ PTCAR_ID (int-to-int)
+        - Optionally compute 'Hour' from PLANNED_DATETIME_* if by_hour=True
+        Returns: DataFrame with columns [delay, station_name, Hour?]
         """
-        delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
-        time_col = "PLANNED_DATETIME_ARR" if arrival else "PLANNED_DATETIME_DEP"
+        side_arrival = self.arrival if arrival is None else bool(arrival)
+        delay_col  = "DELAY_ARR" if side_arrival else "DELAY_DEP"
+        real_date  = "REAL_DATE_ARR" if side_arrival else "REAL_DATE_DEP"
+        planned_dt = "PLANNED_DATETIME_ARR" if side_arrival else "PLANNED_DATETIME_DEP"
 
-        date_str = self.date_filter.strftime("%Y-%m-%d")
 
+        y0 = self._to_ymd(self.start_date)
+        y1 = self._to_ymd(self.end_date)
+
+        hour_sel = f", DATEPART(HOUR, p.{planned_dt}) AS Hour" if self.by_hour else ""
         sql = f"""
-        SELECT 
-            p.{delay_col} AS delay,
-            p.{time_col} AS time,
-            CASE 
-                WHEN TRY_CAST(p.{time_col} AS DATETIME) IS NOT NULL 
-                THEN DATEPART(HOUR, TRY_CAST(p.{time_col} AS DATETIME))
-                ELSE NULL
-            END AS Hour,
+        SELECT
+            CAST(p.{delay_col} AS FLOAT) / 60.0 AS delay,   -- minutes
             op.Complete_name_in_French AS station_name
-        FROM punctuality_public p
-        JOIN operational_points op 
-            ON CAST(p.STOPPING_PLACE_ID AS VARCHAR(50)) = op.PTCAR_ID
-        WHERE 
-            TRY_CONVERT(DATE, p.{time_col}) = '{date_str}'
+            {hour_sel}
+        FROM punctuality_public AS p
+        INNER JOIN operational_points AS op
+            ON p.STOPPING_PLACE_ID = op.PTCAR_ID
+        WHERE p.{delay_col} IS NOT NULL
+          AND p.{delay_col} > 0
+          AND TRY_CONVERT(DATE, p.{real_date}) BETWEEN '{y0}' AND '{y1}'
+          AND op.Complete_name_in_French IS NOT NULL
         """
+        # same columns exist in the schema; delays are stored in seconds; STOPPING_PLACE_ID links to PTCAR_ID. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
 
+        if station_filter:
+            names = [str(s).strip().title().replace("'", "''") for s in station_filter]
+            sql += f"\n  AND op.Complete_name_in_French IN ({', '.join(['%s' % n for n in names])})"
 
-
-
-
-
-
-        # Add station filter manually
-        formatted_stations = ["'" + s.title().replace("'", "''") + "'" for s in station_filter]
-        in_clause = ", ".join(formatted_stations)
-        sql += f"AND op.Complete_name_in_French IN ({in_clause})"
-           
-
-        # Execute query
-        print("Executing SQL Query:\n", sql)  # Debugging: check the final query
         df = pd.read_sql_query(sql, self.conn)
+        if df.empty:
+            return df
 
-        # Clean and enrich
         df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
-        df["station_name"] = df["station_name"].astype(str).str.strip().str.title()
-        df = df.dropna(subset=["delay", "Hour", "station_name"])
-       
-      
-        print(df.head())  # Show top rows
-        
+        df["station_name"] = df["station_name"].astype("string").str.strip().str.title()
+        if self.by_hour:
+            df["Hour"] = pd.to_numeric(df["Hour"], errors="coerce").astype("Int64")
 
-        return df.dropna(subset=["delay", "Hour", "station_name"])
+        df = df.dropna(subset=["delay", "station_name"])
+        if self.by_hour:
+            df = df.dropna(subset=["Hour"])
+            df["Hour"] = df["Hour"].astype(int)
 
-    def create_pivot(self, df):
+        return df
+
+    def create_pivot(self, df: pd.DataFrame):
         """
-        Create a pivot table: rows = station, columns = hour (0-23), values = total delay (minutes).
-        Ensures all 24 hours are included in the x-axis.
+        If by_hour=False: single-column heatmap (station x metric) → mirrors bubble’s station aggregate.
+        If by_hour=True : hours on X, station on Y, using SAME agg metric as bubble.
         """
-        # Group and sum
-        grouped = (
-            df.groupby(["station_name", "Hour"])["delay"]
-            .sum()
-            .div(60)  # Convert to minutes
-            .reset_index()
-        )
+        func = self._agg_func(self.agg_metric)
 
-        # Pivot
-        pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
+        if not self.by_hour:
+            # one value per station for the whole day/range (matches bubble aggregate)
+            grouped = df.groupby("station_name", as_index=False)["delay"].agg(func)
+            # Pivot to a single column named after the metric for better legends
+            grouped = grouped.rename(columns={"delay": self.agg_metric.upper()})
+            pivot = grouped.set_index("station_name")[[self.agg_metric.upper()]]
+        else:
+            grouped = df.groupby(["station_name", "Hour"], as_index=False)["delay"].agg(func)
+            pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
+            # Ensure all 24 hours present
+            for h in range(24):
+                if h not in pivot.columns:
+                    pivot[h] = 0
+            pivot = pivot[sorted(pivot.columns)]
 
-        # Ensure all 24 hours (0–23) are present
-        all_hours = list(range(24))
-        for h in all_hours:
-            if h not in pivot.columns:
-                pivot[h] = 0
-
-        # Sort columns numerically by hour
-        pivot = pivot[sorted(pivot.columns)]
-
-        # Sort rows by total delay
-        pivot["Total"] = pivot.sum(axis=1)
-        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total").head(10)
+        # Top 10 stations by the day/range aggregate (sum across columns for hourly case)
+        totals = pivot.sum(axis=1)
+        pivot = pivot.loc[totals.sort_values(ascending=False).index].head(10)
 
         return pivot
 
-
-    def render_heatmap(self, pivot_table, arrival=False):
+    def render_heatmap(self, pivot_table: pd.DataFrame):
         """
-        Plot a heatmap from a pivot table.
+        Plotly heatmap aligned with bubble settings.
         """
-        title = "Arrival" if arrival else "Departure"
-        return px.imshow(
-            pivot_table,
-            labels=dict(x="Hour", y="Station", color="Total Delay (min)"),
-            aspect="auto",
-            color_continuous_scale="YlOrRd",
-            title=f"{title} Delay Heatmap (Top 10 Stations)"
-        )
+        side = "Arrival" if self.arrival else "Departure"
+        metric = self.agg_metric.upper()
+        if not self.by_hour:
+            # show as a 2D heatmap with a single column (same semantics as bubble)
+            fig = px.imshow(
+                pivot_table,
+                labels=dict(x=metric, y="Station", color=f"{metric} Delay (min)"),
+                aspect="auto",
+                color_continuous_scale="YlOrRd",
+                title=f"{side} Delay Heatmap — {metric} per Station (matches BubbleMap)"
+            )
+        else:
+            fig = px.imshow(
+                pivot_table,
+                labels=dict(x="Hour", y="Station", color=f"{metric} Delay (min)"),
+                aspect="auto",
+                color_continuous_scale="YlOrRd",
+                title=f"{side} Delay Heatmap by Hour — {metric} (matches BubbleMap)"
+            )
+        return fig
 
 
 
