@@ -462,155 +462,100 @@ from typing import Optional, Union, Iterable, Tuple
 DateLike  = Union[str, datetime.date, datetime.datetime]
 DateRange = Tuple[DateLike, DateLike]
 
+import datetime
+import pandas as pd
+import plotly.express as px
+
 class DelayHeatmapDB:
-    def __init__(self, conn, date_filter,
-                 arrival: bool = False,          # match bubblemap default (DEP)
-                 agg_metric: str = "p90",        # p90 | median | mean | max | sum
-                 by_hour: bool = False):         # False => 1 column (like bubble’s station aggregate)
+    def __init__(self, conn, date_filter):
         """
         :param conn: DB connection/engine
-        :param date_filter: date or (start, end)
+        :param date_filter: datetime.date | datetime.datetime | str
         """
         self.conn = conn
-        self.arrival = bool(arrival)
-        self.agg_metric = agg_metric.lower()
-        self.by_hour = bool(by_hour)
+        self.date_filter = pd.to_datetime(date_filter).date()
 
-        # accept single date or (start, end)
-        if isinstance(date_filter, (tuple, list)) and len(date_filter) == 2:
-            self.start_date = pd.to_datetime(date_filter[0]).date()
-            self.end_date   = pd.to_datetime(date_filter[1]).date()
-        else:
-            d = pd.to_datetime(date_filter).date()
-            self.start_date = d
-            self.end_date   = d
-
-    @staticmethod
-    def _to_ymd(d: DateLike) -> str:
-        if isinstance(d, datetime.datetime):
-            d = d.date()
-        if isinstance(d, datetime.date):
-            return d.strftime("%Y-%m-%d")
-        s = str(d).strip().replace("/", "-")
-        m = re.fullmatch(r"(\d{2})-(\d{2})-(\d{4})", s)  # dd-mm-yyyy
-        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else s
-
-    @staticmethod
-    def _agg_func(name: str):
-        name = name.lower()
-        if name == "mean":   return "mean"
-        if name == "median": return "median"
-        if name == "max":    return "max"
-        if name == "sum":    return "sum"
-        if name == "p90":    return lambda s: float(pd.to_numeric(s, errors="coerce").quantile(0.90))
-        raise ValueError("agg_metric must be one of: p90|median|mean|max|sum")
-
-    def query_delay_data(self, station_filter: Optional[Iterable[str]] = None):
+    def query_delay_data(self, arrival=False, station_filter=None):
         """
-        Pull delays (in MINUTES), aligned with bubble map:
-        - Use DELAY_DEP (or DELAY_ARR if arrival=True)  [seconds in DB → minutes here]
-        - Filter by REAL_DATE_DEP/ARR for date range
-        - Join STOPPING_PLACE_ID ↔ PTCAR_ID (int-to-int)
-        - Optionally compute 'Hour' from PLANNED_DATETIME_* if by_hour=True
-        Returns: DataFrame with columns [delay, station_name, Hour?]
+        Return columns: delay (minutes), time, station_name, Hour (0..23)
         """
-        side_arrival = self.arrival if arrival is None else bool(arrival)
-        delay_col  = "DELAY_ARR" if side_arrival else "DELAY_DEP"
-        real_date  = "REAL_DATE_ARR" if side_arrival else "REAL_DATE_DEP"
-        planned_dt = "PLANNED_DATETIME_ARR" if side_arrival else "PLANNED_DATETIME_DEP"
+        delay_col = "DELAY_ARR" if arrival else "DELAY_DEP"
+        time_col  = "PLANNED_DATETIME_ARR" if arrival else "PLANNED_DATETIME_DEP"
 
+        date_str = self.date_filter.strftime("%Y-%m-%d")
 
-        y0 = self._to_ymd(self.start_date)
-        y1 = self._to_ymd(self.end_date)
-
-        hour_sel = f", DATEPART(HOUR, p.{planned_dt}) AS Hour" if self.by_hour else ""
+        # Convert delay to MINUTES in SQL to avoid confusion
         sql = f"""
-        SELECT
-            CAST(p.{delay_col} AS FLOAT) / 60.0 AS delay,   -- minutes
+        SELECT 
+            CAST(p.{delay_col} AS FLOAT) / 60.0 AS delay,            -- minutes
+            p.{time_col} AS time,
+            DATEPART(HOUR, p.{time_col}) AS Hour,                    -- 0..23
             op.Complete_name_in_French AS station_name
-            {hour_sel}
         FROM punctuality_public AS p
         INNER JOIN operational_points AS op
-            ON p.STOPPING_PLACE_ID = op.PTCAR_ID
-        WHERE p.{delay_col} IS NOT NULL
-          AND p.{delay_col} > 0
-          AND TRY_CONVERT(DATE, p.{real_date}) BETWEEN '{y0}' AND '{y1}'
-          AND op.Complete_name_in_French IS NOT NULL
+            ON p.STOPPING_PLACE_ID = op.PTCAR_ID                     -- int-to-int join
+        WHERE 
+            TRY_CONVERT(DATE, p.{time_col}) = '{date_str}'
+            AND p.{delay_col} IS NOT NULL
+            AND p.{delay_col} > 0
+            AND op.Complete_name_in_French IS NOT NULL
         """
-        # same columns exist in the schema; delays are stored in seconds; STOPPING_PLACE_ID links to PTCAR_ID. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
 
+        # Optional station filter
         if station_filter:
             names = [str(s).strip().title().replace("'", "''") for s in station_filter]
-            sql += f"\n  AND op.Complete_name_in_French IN ({', '.join(['%s' % n for n in names])})"
+            in_clause = ", ".join(f"'{n}'" for n in names)
+            sql += f"\n  AND op.Complete_name_in_French IN ({in_clause})"
 
+        # Execute
         df = pd.read_sql_query(sql, self.conn)
-        if df.empty:
-            return df
 
-        df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
+        # Clean/enrich
+        df["delay"] = pd.to_numeric(df["delay"], errors="coerce")           # already in minutes
+        df["Hour"] = pd.to_numeric(df["Hour"], errors="coerce").astype("Int64")
         df["station_name"] = df["station_name"].astype("string").str.strip().str.title()
-        if self.by_hour:
-            df["Hour"] = pd.to_numeric(df["Hour"], errors="coerce").astype("Int64")
 
-        df = df.dropna(subset=["delay", "station_name"])
-        if self.by_hour:
-            df = df.dropna(subset=["Hour"])
-            df["Hour"] = df["Hour"].astype(int)
+        df = df.dropna(subset=["delay", "Hour", "station_name"])
+        df["Hour"] = df["Hour"].astype(int)
+
+        # Debug (optional)
+        # print(df.describe(include='all'))
 
         return df
 
-    def create_pivot(self, df: pd.DataFrame):
+    def create_pivot(self, df):
         """
-        If by_hour=False: single-column heatmap (station x metric) → mirrors bubble’s station aggregate.
-        If by_hour=True : hours on X, station on Y, using SAME agg metric as bubble.
+        Pivot: rows=station, cols=Hour (0..23), values=sum of delay (minutes).
         """
-        func = self._agg_func(self.agg_metric)
+        grouped = (
+            df.groupby(["station_name", "Hour"], as_index=False)["delay"]
+              .sum()  # already in minutes
+        )
 
-        if not self.by_hour:
-            # one value per station for the whole day/range (matches bubble aggregate)
-            grouped = df.groupby("station_name", as_index=False)["delay"].agg(func)
-            # Pivot to a single column named after the metric for better legends
-            grouped = grouped.rename(columns={"delay": self.agg_metric.upper()})
-            pivot = grouped.set_index("station_name")[[self.agg_metric.upper()]]
-        else:
-            grouped = df.groupby(["station_name", "Hour"], as_index=False)["delay"].agg(func)
-            pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
-            # Ensure all 24 hours present
-            for h in range(24):
-                if h not in pivot.columns:
-                    pivot[h] = 0
-            pivot = pivot[sorted(pivot.columns)]
+        pivot = grouped.pivot(index="station_name", columns="Hour", values="delay").fillna(0)
 
-        # Top 10 stations by the day/range aggregate (sum across columns for hourly case)
-        totals = pivot.sum(axis=1)
-        pivot = pivot.loc[totals.sort_values(ascending=False).index].head(10)
+        # Ensure all 24 hours present
+        for h in range(24):
+            if h not in pivot.columns:
+                pivot[h] = 0
 
+        pivot = pivot[sorted(pivot.columns)]
+        pivot["Total"] = pivot.sum(axis=1)
+        pivot = pivot.sort_values("Total", ascending=False).drop(columns="Total").head(10)
         return pivot
 
-    def render_heatmap(self, pivot_table: pd.DataFrame):
+    def render_heatmap(self, pivot_table, arrival=False):
         """
-        Plotly heatmap aligned with bubble settings.
+        Plotly heatmap; values are minutes.
         """
-        side = "Arrival" if self.arrival else "Departure"
-        metric = self.agg_metric.upper()
-        if not self.by_hour:
-            # show as a 2D heatmap with a single column (same semantics as bubble)
-            fig = px.imshow(
-                pivot_table,
-                labels=dict(x=metric, y="Station", color=f"{metric} Delay (min)"),
-                aspect="auto",
-                color_continuous_scale="YlOrRd",
-                title=f"{side} Delay Heatmap — {metric} per Station (matches BubbleMap)"
-            )
-        else:
-            fig = px.imshow(
-                pivot_table,
-                labels=dict(x="Hour", y="Station", color=f"{metric} Delay (min)"),
-                aspect="auto",
-                color_continuous_scale="YlOrRd",
-                title=f"{side} Delay Heatmap by Hour — {metric} (matches BubbleMap)"
-            )
-        return fig
+        title = "Arrival" if arrival else "Departure"
+        return px.imshow(
+            pivot_table,
+            labels=dict(x="Hour", y="Station", color="Total Delay (min)"),
+            aspect="auto",
+            color_continuous_scale="YlOrRd",
+            title=f"{title} Delay Heatmap (Top 10 Stations)"
+        )
 
 
 
