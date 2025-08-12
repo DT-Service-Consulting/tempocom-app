@@ -126,19 +126,18 @@ if "bubble_map1" not in st.session_state:
 
 
 
-boxplot_df = load_boxplot_data()
-
 if "direction_box" not in st.session_state:
-    with st.spinner("Loading DelayBoxPlot..."):
-        st.session_state.direction_box = DelayBoxPlot(boxplot_df)
+    with st.spinner("Loading DelayBoxPlot from DB..."):
+        st.session_state.direction_box = DelayBoxPlot(dbc)
 
 if "station_box" not in st.session_state:
-    with st.spinner("Loading StationBoxPlot..."):
-        st.session_state.station_box = StationBoxPlot(boxplot_df)
+    with st.spinner("Loading StationBoxPlot from DB..."):
+        st.session_state.station_box = StationBoxPlot(dbc)
 
 if "links_box" not in st.session_state:
-    with st.spinner("Loading LinkBoxPlot..."):
-        st.session_state.links_box = LinkBoxPlot(boxplot_df)
+    with st.spinner("Loading LinkBoxPlot from DB..."):
+        st.session_state.links_box = LinkBoxPlot(dbc)
+
 
 # Local references
 direction_box = st.session_state.direction_box
@@ -322,49 +321,60 @@ if page == "Dashboard Tab":
 # Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
 elif page == "Analytics Tab":
     with st.expander("📦 Total Delay Boxplot by Relation"):
-        # Get all unique relation directions, filtering out EURST
-        all_directions = sorted(direction_box.df["Relation direction"].dropna().unique())
+        import re
 
+        # 1) Relations list from DB-backed boxplot df (uses 'name')
+        all_relations = sorted(direction_box.df["name"].dropna().unique())
+        filtered_relations = [r for r in all_relations if "EURST" not in r]
 
-        filtered_directions = [d for d in all_directions if "EURST" not in d]
-
-        selected_directions = st.multiselect(
-            "Select up to 3 Relation Directions:",
-            options=filtered_directions,
+        selected_relations = st.multiselect(
+            "Select up to 3 Relations:",
+            options=filtered_relations,
             max_selections=3
         )
 
-        if selected_directions:
-            # -- Get all related directions across selected relations
-            all_related_dirs = set()
-            for d in selected_directions:
-                relation = direction_box.get_relation_from_direction(d)
-                if relation:
-                    related = direction_box.get_directions_by_relation(relation)
-                    all_related_dirs.update(related)
-
+        if selected_relations:
+            # 2) Relation boxplot
             st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
-            fig = direction_box.render_boxplot(directions=list(all_related_dirs))
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
+            fig_rel = direction_box.render_boxplot(filter_names=selected_relations)
+            if fig_rel:
+                st.plotly_chart(fig_rel, use_container_width=True)
             else:
-                st.info("No delay distribution data found for the selected directions.")
+                st.info("No relation-level data for the current selection.")
 
-            # -- Per-direction breakdowns
-            for d in selected_directions:
-                st.markdown(f"### 🏢 Delay Distribution by Station for **{d}**")
-                fig_station = direction_box.render_station_distribution_for_direction(d)
-                if fig_station:
-                    st.plotly_chart(fig_station, use_container_width=True)
+            # 3) Station boxplot → names that contain any selected relation
+            rel_patterns = [re.escape(r.lower()) for r in selected_relations]
+            station_names = sorted({
+                n for n in station_box.df["name"].dropna().unique()
+                if any(p in str(n).lower() for p in rel_patterns)
+            })
+
+            st.markdown("### 🏢 Delay Distribution by Station (within selected relations)")
+            if station_names:
+                fig_sta = station_box.render_boxplot(filter_names=station_names)
+                if fig_sta:
+                    st.plotly_chart(fig_sta, use_container_width=True)
                 else:
-                    st.info(f"No station-level data for **{d}**.")
+                    st.info("No station-level data after filtering.")
+            else:
+                st.info("No stations matched the selected relations.")
 
-                st.markdown(f"### 🔗 Delay Between Consecutive Stations in **{d}**")
-                fig_link = link_box.render_boxplot(d)
+            # 4) Link boxplot → names that contain any selected relation
+            link_names = sorted({
+                n for n in link_box.df["name"].dropna().unique()
+                if any(p in str(n).lower() for p in rel_patterns)
+            })
+
+            st.markdown("### 🔗 Delay Between Consecutive Stations (within selected relations)")
+            if link_names:
+                fig_link = link_box.render_boxplot(filter_names=link_names)
                 if fig_link:
                     st.plotly_chart(fig_link, use_container_width=True)
                 else:
-                    st.info(f"No link-level data for **{d}**.")
+                    st.info("No link-level data after filtering.")
+            else:
+                st.info("No links matched the selected relations.")
+
 
 
 elif page == "Hourly Delay Tab":
