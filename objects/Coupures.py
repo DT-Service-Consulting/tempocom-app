@@ -30,7 +30,7 @@ class Coupures:
             "OTHER": {"color": "#fd6c9e", "dash": None, "label": "Autre impact"},
         }
 
-    def __init__(self,path_to_mart:str=os.getenv('MART_RELATIVE_PATH')):
+    def __init__(self,path_to_mart:str="../tempocom_mart"):
         """
         Initialize the Coupures object with data from the mart directory.
         

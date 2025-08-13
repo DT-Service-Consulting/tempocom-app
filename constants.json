@@ -29,17 +29,10 @@
             "available": true
         },
         {
-            "title": "🌊Domino Effect Analyzer",
+            "title": "🌊Domino Effect",
             "description": "Analyze the domino effect of disruptions on the railway network.",
             "access": "mix",
             "redirect": "pages/Domino_Effect_Analyzer.py",
-            "available": true
-        },
-        {
-            "title": "🚫Network Resilience",
-            "description": "Railway Resilience Study via Topology Analysis. In collaboration with UAntwerp.",
-            "access": "public",
-            "redirect": "pages/Network_Resilience.py",
             "available": false
         }
     ],

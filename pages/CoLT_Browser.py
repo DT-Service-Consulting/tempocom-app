@@ -14,6 +14,15 @@ from components.page_template import page_template
 title = "🚧 CoLT Browser"
 page_template(title)
 
+# Tutorial
+st.info("""
+**📚 How to use CoLT Browser:**
+1. **Search** : Enter the disruption ID or use filters (leader, period, status)
+2. **Navigation** : Use ⬅/➡ buttons to browse filtered disruptions
+3. **Map** : Visualize the disruption on the railway network
+4. **Details** : Check the work description at the bottom of the page
+""")
+
 @st.cache_data()
 def load(): return MacroNetwork(), Coupures(), json.load(open("constants.json"))
 network, coupures, constants = load()

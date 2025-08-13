@@ -9,6 +9,15 @@ import os
 title = "✎ Network Editor"
 page_template(title)
 
+# Tutorial
+st.info("""
+**📚 How to use Network Editor:**
+1. **Shortest Path** : Select departure and arrival stations to calculate optimal route
+2. **Close Connections** : Select links to close to simulate disruptions
+3. **Visualization** : Observe the impact of modifications on the railway network
+4. **Algorithm** : Shortest path uses Floyd-Warshall algorithm
+""")
+
 @st.cache_data()
 def load(): return MacroNetwork()
 network = load()
