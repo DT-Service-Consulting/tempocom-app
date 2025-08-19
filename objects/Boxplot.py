@@ -1,5 +1,3 @@
-# objects/Boxplot.py
-
 import pandas as pd
 import plotly.graph_objects as go
 import unicodedata
@@ -12,15 +10,15 @@ def _norm(s: str) -> str:
 
 class BaseBoxPlotDB:
     TABLE_MAP = {
-        "relation": "punctuality_boxplots",          # unchanged
-        "station":  "punctuality_boxplots_station",  # ✅ new table
-        "link":     "punctuality_boxplots_link",     # ✅ new table
+        "relation": "punctuality_boxplots",
+        "station":  "punctuality_boxplots_station",
+        "link":     "punctuality_boxplots_link",
     }
 
     def __init__(self, db_connector, plot_type: str):
         self.dbc = db_connector
         self.plot_type = plot_type
-        self.table = self.TABLE_MAP[plot_type]       # pick the right table
+        self.table = self.TABLE_MAP[plot_type]
         self.df = self._load_data()
         self.df["_key"] = self.df["name"].map(_norm)
 
@@ -53,16 +51,11 @@ class BaseBoxPlotDB:
             return fig
 
         for _, row in data.iterrows():
-            has_outliers = bool(row["outliers"])
+            y_values = row["outliers"] + [row["Q1"], row["Q3"], row["median"], row["min"], row["max"]]
             fig.add_trace(go.Box(
-                q1=[row["Q1"]],
-                q3=[row["Q3"]],
-                median=[row["median"]],
-                lowerfence=[row["min"]],
-                upperfence=[row["max"]],
+                y=y_values,
                 name=row["name"],
-                boxpoints="outliers" if has_outliers else False,
-                y=row["outliers"] if has_outliers else None,
+                boxpoints="outliers" if row["outliers"] else False,
                 hovertext=f"n={row['n_samples']}",
                 hoverinfo="text",
             ))
