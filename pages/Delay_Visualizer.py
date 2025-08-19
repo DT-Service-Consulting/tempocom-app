@@ -7,7 +7,7 @@ from objects.Delay_network import (
     DelayBubbleMap, DelayBubbleMap2, DelayHeatmapDB,
     DelayHourlyTotalLineChart, DelayHourlyTotalLineChartByTrain, DelayHourlyLinkTotalLineChart
 )
-from objects.Boxplot import DelayBoxPlot, StationBoxPlot ,LinkBoxPlot
+from objects.Boxplot import DelayBoxPlot,BaseBoxPlotDB, StationBoxPlot ,LinkBoxPlot
 import time
 # GLOBAL LIBRAIRIES
 import importlib, sys, os
@@ -135,29 +135,23 @@ if "bubble_map1" not in st.session_state:
     st.session_state.bubble_map1 = DelayBubbleMap2(dbc)
 
 
-
+# --- Ensure DB-backed boxplot objects exist in session state (create once) ---
 if "direction_box" not in st.session_state:
-    with st.spinner("Loading DelayBoxPlot from DB..."):
-        st.session_state.direction_box = DelayBoxPlot(dbc)
+    with st.spinner("Loading Relation (Direction) Boxplots from DB…"):
+        st.session_state["direction_box"] = DelayBoxPlot(dbc)
 
 if "station_box" not in st.session_state:
-    with st.spinner("Loading StationBoxPlot from DB..."):
-        st.session_state.station_box = StationBoxPlot(dbc)
+    with st.spinner("Loading Station Boxplots from DB…"):
+        st.session_state["station_box"] = StationBoxPlot(dbc)
 
-if "links_box" not in st.session_state:
-    with st.spinner("Loading LinkBoxPlot from DB..."):
-        st.session_state.links_box = LinkBoxPlot(dbc)
+if "links_box" not in st.session_state:   # keep this key name to match the rest of your file
+    with st.spinner("Loading Link Boxplots from DB…"):
+        st.session_state["links_box"] = LinkBoxPlot(dbc)
 
-
-# Local references
-direction_box = st.session_state.direction_box
-station_box = st.session_state.station_box
-link_box = st.session_state.links_box
-
-# Now assign local variables
-direction_box = st.session_state.direction_box
-station_box = st.session_state.station_box
-link_box = st.session_state.links_box
+# --- Local references (single assignment) ---
+direction_box = st.session_state["direction_box"]
+station_box   = st.session_state["station_box"]
+link_box      = st.session_state["links_box"]
 
 
 bubble_map = st.session_state.bubble_map
@@ -173,7 +167,57 @@ page = option_menu(
 
 
 ####################################################################################################################################################
+@st.cache_data
+def stations_and_links_from_db(_dbc, selected_relation_names):
+    if not selected_relation_names:
+        return {}, {}
 
+    placeholders = ",".join(["?"] * len(selected_relation_names))
+    sql = f"""
+        WITH rel AS (
+            SELECT rd.ID, rd.name
+            FROM relation_directions rd
+            WHERE rd.name IN ({placeholders})
+        ),
+        ordered_stops AS (
+            SELECT
+                r.name AS relation_name,
+                ds.order_in_route,
+                op.Complete_name_in_French AS station_name
+            FROM direction_stops ds
+            JOIN rel r
+              ON r.ID = ds.direction_id
+            JOIN operational_points op
+              ON ds.station_id = TRY_CAST(op.PTCAR_ID AS INT)
+        )
+        SELECT relation_name, station_name, order_in_route
+        FROM ordered_stops
+        ORDER BY relation_name, order_in_route;
+    """
+    st_df = pd.read_sql(sql, _dbc.conn, params=selected_relation_names)
+
+    rel_to_stations = {}
+    for rel, grp in st_df.groupby("relation_name", sort=False):
+        seen, ordered = set(), []
+        for nm in grp["station_name"]:
+            nm = (nm or "").strip()
+            if nm and nm not in seen:
+                ordered.append(nm)
+                seen.add(nm)
+        rel_to_stations[rel] = ordered
+
+    LINK_SEP = " ? "  # <-- match punctuality_boxplots_link.name
+    rel_to_links = {}
+    for rel, seq in rel_to_stations.items():
+        links = [f"{a}{LINK_SEP}{b}" for a, b in zip(seq, seq[1:])]
+        seen_l, ordered_l = set(), []
+        for l in links:
+            if l not in seen_l:
+                ordered_l.append(l)
+                seen_l.add(l)
+        rel_to_links[rel] = ordered_l
+
+    return rel_to_stations, rel_to_links
 
 
 @st.cache_data
@@ -328,62 +372,40 @@ if page == "Dashboard Tab":
                     st.warning("No arrival delay data found for selected date/stations.")
 
 
-# Assuming `link_box = LinkBoxPlot(delay_data_path)` and `direction_box = DirectionBoxPlot(delay_data_path)` are already initialized
+
+
 elif page == "Analytics Tab":
-    with st.expander("📦 Total Delay Boxplot by Relation"):
-        import re
-
-        # 1) Relations list from DB-backed boxplot df (uses 'name')
+    with st.expander("📦 Total Delay Boxplots (Relation → Stations → Links)", expanded=True):
         all_relations = sorted(direction_box.df["name"].dropna().unique())
-        filtered_relations = [r for r in all_relations if "EURST" not in r]
-
         selected_relations = st.multiselect(
-            "Select up to 3 Relations:",
-            options=filtered_relations,
+            "Select relation direction(s):",
+            options=all_relations,
             max_selections=3
         )
 
-        if selected_relations:
-            # 2) Relation boxplot
-            st.markdown("### 🎯 Total Delay Distribution for Selected Relations")
-            fig_rel = direction_box.render_boxplot(filter_names=selected_relations)
-            if fig_rel:
-                st.plotly_chart(fig_rel, use_container_width=True)
-            else:
-                st.info("No relation-level data for the current selection.")
+        if not selected_relations:
+            st.info("Select at least one relation to see the boxplots.")
+            st.stop()
 
-            # 3) Station boxplot → names that contain any selected relation
-            rel_patterns = [re.escape(r.lower()) for r in selected_relations]
-            station_names = sorted({
-                n for n in station_box.df["name"].dropna().unique()
-                if any(p in str(n).lower() for p in rel_patterns)
-            })
+        st.markdown("### 🎯 Total Delay — Selected Relation(s)")
+        st.plotly_chart(direction_box.render_boxplot(filter_names=selected_relations), use_container_width=True)
 
-            st.markdown("### 🏢 Delay Distribution by Station (within selected relations)")
-            if station_names:
-                fig_sta = station_box.render_boxplot(filter_names=station_names)
-                if fig_sta:
-                    st.plotly_chart(fig_sta, use_container_width=True)
-                else:
-                    st.info("No station-level data after filtering.")
-            else:
-                st.info("No stations matched the selected relations.")
+        rel_to_stations, rel_to_links = stations_and_links_from_db(dbc, selected_relations)
+        stations_for_rel = sorted({s for rel in selected_relations for s in rel_to_stations.get(rel, [])})
+        links_for_rel    = sorted({l for rel in selected_relations for l in rel_to_links.get(rel, [])})
 
-            # 4) Link boxplot → names that contain any selected relation
-            link_names = sorted({
-                n for n in link_box.df["name"].dropna().unique()
-                if any(p in str(n).lower() for p in rel_patterns)
-            })
+        st.markdown("### 🏢 Total Delay — Stations on Selected Relation(s)")
+        if stations_for_rel:
+            st.plotly_chart(station_box.render_boxplot(filter_names=stations_for_rel), use_container_width=True)
+        else:
+            st.info("No stations found for the selected relation(s) via direction_stops.")
 
-            st.markdown("### 🔗 Delay Between Consecutive Stations (within selected relations)")
-            if link_names:
-                fig_link = link_box.render_boxplot(filter_names=link_names)
-                if fig_link:
-                    st.plotly_chart(fig_link, use_container_width=True)
-                else:
-                    st.info("No link-level data after filtering.")
-            else:
-                st.info("No links matched the selected relations.")
+        st.markdown("### 🔗 Total Delay — Links (Consecutive Stations) on Selected Relation(s)")
+        if links_for_rel:
+            st.plotly_chart(link_box.render_boxplot(filter_names=links_for_rel), use_container_width=True)
+        else:
+            st.info("No links found for the selected relation(s) via direction_stops.")
+
 
 
 
