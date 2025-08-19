@@ -54,8 +54,18 @@ DELAY_PATH = f"{MART_PATH}/public/delays_standardized_titlecase.csv"
 BOXPLOT_PATH = f"{MART_PATH}/public/df_monthly_with_headers.csv"
 TRAIN_DATA_PATH = f"{MART_PATH}/public/cleaned_daily_full.csv"
 
-st.set_page_config(page_title="🕒 Delay Visulizer", layout="wide")
-st.title("🕒 Delay Visulizer")
+page_template("🕰️Delay Visualizer")
+
+# Tutorial
+st.info("""
+**📚 How to use Delay Visualizer:**
+1. **Bubble Map** : Visualize delays by station with colored bubbles
+2. **Heatmap** : Analyze temporal distribution of delays
+3. **Charts** : Explore hourly trends and by train
+4. **Boxplots** : Compare delay distributions between stations and links
+5. **Filters** : Use options to refine your analysis
+""")
+
 
 # Caching
 @st.cache_data

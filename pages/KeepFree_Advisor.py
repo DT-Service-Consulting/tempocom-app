@@ -9,6 +9,16 @@ import pandas as pd
 
 title = "📈🚉Keep Free Advisor"
 page_template(title)
+
+# Tutorial
+st.info("""
+**📚 How to use Keep Free Advisor:**
+1. **Section Selection** : Choose the section to cut in the network
+2. **Automatic Analysis** : The system generates recommendations for lines to keep free
+3. **Visualization** : Observe CTL sections (to cut) and recommended lines
+4. **Application** : Select and apply recommended keep-frees
+5. **Impact** : Analyze the impact of modifications on the network
+""")
 height,width, ratio = ResponsiveMap()
 
 @st.cache_data()
