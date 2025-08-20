@@ -173,50 +173,30 @@ def stations_and_links_from_db(_dbc, selected_relation_names):
     if not selected_relation_names:
         return {}, {}
 
-    placeholders = ",".join(["?"] * len(selected_relation_names))
+    name_list = ",".join(f"'{r}'" for r in selected_relation_names)
+
     sql = f"""
-        WITH rel AS (
-            SELECT rd.ID, rd.name
-            FROM relation_directions rd
-            WHERE rd.name IN ({placeholders})
-        ),
-        ordered_stops AS (
-            SELECT
-                r.name AS relation_name,
-                ds.order_in_route,
-                op.Complete_name_in_French AS station_name
-            FROM direction_stops ds
-            JOIN rel r
-              ON r.ID = ds.direction_id
-            JOIN operational_points op
-              ON ds.station_id = TRY_CAST(op.PTCAR_ID AS INT)
-        )
-        SELECT relation_name, station_name, order_in_route
-        FROM ordered_stops
-        ORDER BY relation_name, order_in_route;
+    SELECT
+        direction_name AS relation_name,
+        station_name,
+        order_in_route
+    FROM direction_stops
+    WHERE direction_name IN ({name_list})
+    ORDER BY direction_name, order_in_route
     """
-    st_df = pd.read_sql(sql, _dbc.conn, params=selected_relation_names)
 
-    rel_to_stations = {}
-    for rel, grp in st_df.groupby("relation_name", sort=False):
-        seen, ordered = set(), []
-        for nm in grp["station_name"]:
-            nm = (nm or "").strip()
-            if nm and nm not in seen:
-                ordered.append(nm)
-                seen.add(nm)
-        rel_to_stations[rel] = ordered
+    st_df = pd.read_sql(sql, _dbc.conn)
+    st_df["station_name"] = st_df["station_name"].str.title()
 
-    LINK_SEP = " ? "  # <-- match punctuality_boxplots_link.name
-    rel_to_links = {}
-    for rel, seq in rel_to_stations.items():
-        links = [f"{a}{LINK_SEP}{b}" for a, b in zip(seq, seq[1:])]
-        seen_l, ordered_l = set(), []
-        for l in links:
-            if l not in seen_l:
-                ordered_l.append(l)
-                seen_l.add(l)
-        rel_to_links[rel] = ordered_l
+    rel_to_stations = {
+        rel: group["station_name"].tolist()
+        for rel, group in st_df.groupby("relation_name")
+    }
+
+    rel_to_links = {
+        rel: [f"{s1} ⇔ {s2}" for s1, s2 in zip(stations[:-1], stations[1:])]
+        for rel, stations in rel_to_stations.items()
+    }
 
     return rel_to_stations, rel_to_links
 
@@ -394,16 +374,22 @@ elif page == "Analytics Tab":
         rel_to_stations, rel_to_links = stations_and_links_from_db(dbc, selected_relations)
         stations_for_rel = sorted({s for rel in selected_relations for s in rel_to_stations.get(rel, [])})
         links_for_rel    = sorted({l for rel in selected_relations for l in rel_to_links.get(rel, [])})
+      
+
 
         st.markdown("### 🏢 Total Delay — Stations on Selected Relation(s)")
+        st.write("➡ Rendering Station Boxplot for:", stations_for_rel)
         if stations_for_rel:
-            st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
+           st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
+
+
         else:
             st.info("No stations found for the selected relation(s) via direction_stops.")
 
         st.markdown("### 🔗 Total Delay — Links (Consecutive Stations) on Selected Relation(s)")
         if links_for_rel:
             st.plotly_chart(link_box.render_boxplot(filter_names=links_for_rel), use_container_width=True)
+
         else:
             st.info("No links found for the selected relation(s) via direction_stops.")
 

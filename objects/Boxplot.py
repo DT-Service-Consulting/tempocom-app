@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import unicodedata
+import streamlit as st
 
 def _norm(s: str) -> str:
     if s is None:
@@ -65,6 +66,7 @@ class BaseBoxPlotDB:
 class DelayBoxPlot(BaseBoxPlotDB):
     def __init__(self, db_connector):
         super().__init__(db_connector, plot_type="relation")
+
     def render_boxplot(self, filter_names=None):
         data = self._filter_df(filter_names)
         return self._create_boxplot("Total Delay Distribution by Relation", data=data)
@@ -72,40 +74,30 @@ class DelayBoxPlot(BaseBoxPlotDB):
 class StationBoxPlot(BaseBoxPlotDB):
     def __init__(self, db_connector):
         super().__init__(db_connector, plot_type='station')
-    
+        
+        
+        
+    def get_stations_for_directions(self, directions):
+        name_list = ",".join(f"'{d}'" for d in directions)
+        st.write("🧪 Fetching stations for:", name_list)
 
-
-    def get_direction_ids(self, direction_names):
-        name_list = ",".join(f"'{name}'" for name in direction_names)
         sql = f"""
-        SELECT DISTINCT direction_id
+        SELECT DISTINCT station_name
         FROM direction_stops
-        WHERE direction IN ({name_list})
+        WHERE direction_name IN ({name_list})
         """
         df = pd.read_sql(sql, self.dbc.conn)
-        return df['direction_id'].tolist()
-
-    def get_stations_for_directions(self, direction_names):
-        direction_ids = self.get_direction_ids(direction_names)
-        if not direction_ids:
-            return []
-
-        id_list = ",".join(str(d) for d in direction_ids)
-        sql = f"""
-        SELECT DISTINCT ds.station_id, op.Complete_name_in_French AS station_name
-        FROM direction_stops ds
-        JOIN operational_points op ON ds.station_id = op.PTCAR_ID
-        WHERE ds.direction_id IN ({id_list})
-        """
-        df = pd.read_sql(sql, self.dbc.conn)
+        st.write("🧪 Raw station query result:", df.head())
         return df['station_name'].dropna().str.title().unique().tolist()
-
-
 
     def render_boxplot(self, selected_directions=None):
         if selected_directions:
             stations = self.get_stations_for_directions(selected_directions)
-            self.df = self.df[self.df['name'].isin(stations)]
+            st.write("🔍 Selected directions:", selected_directions)
+            st.write("🔍 Matched stations:", stations)
+            st.write("📦 Available boxplot keys:", self.df['_key'].tolist()[:5])
+            st.write("📦 Raw station names:", self.df['name'].tolist()[:5])
+            self.df = self._filter_df(stations)
         return self._create_boxplot("Total Delay Distribution by Station")
 
 
@@ -114,30 +106,25 @@ class LinkBoxPlot(BaseBoxPlotDB):
         super().__init__(db_connector, plot_type='link')
 
     def get_links_for_directions(self, directions):
-        direction_list = ",".join(f"'{d}'" for d in directions)
-        
+        name_list = ",".join(f"'{d}'" for d in directions)
         sql = f"""
-        SELECT ds.direction, ds.PTCAR_ID, ds.position, op.Complete_name_in_French AS station_name
-        FROM direction_stops ds
-        JOIN operational_points op ON ds.PTCAR_ID = op.PTCAR_ID
-        WHERE ds.direction IN ({direction_list})
-        ORDER BY ds.direction, ds.position
+        SELECT direction_name, station_name, order_in_route
+        FROM direction_stops
+        WHERE direction_name IN ({name_list})
+        ORDER BY direction_name, order_in_route
         """
-        
         df = pd.read_sql(sql, self.dbc.conn)
         df['station_name'] = df['station_name'].str.title()
-        
+
         links = []
-        for dir_name, group in df.groupby('direction'):
-            stations = group.sort_values('position')['station_name'].tolist()
+        for direction, group in df.groupby("direction_name"):
+            stations = group.sort_values("order_in_route")["station_name"].tolist()
             for i in range(len(stations) - 1):
                 links.append(f"{stations[i]} ⇔ {stations[i+1]}")
-        
         return list(set(links))
-
 
     def render_boxplot(self, selected_directions=None):
         if selected_directions:
             links = self.get_links_for_directions(selected_directions)
-            self.df = self.df[self.df['name'].isin(links)]
+            self.df = self._filter_df(links)
         return self._create_boxplot("Total Delay Distribution by Link")
