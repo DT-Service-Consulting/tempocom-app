@@ -397,7 +397,7 @@ elif page == "Analytics Tab":
 
         st.markdown("### 🏢 Total Delay — Stations on Selected Relation(s)")
         if stations_for_rel:
-            st.plotly_chart(station_box.render_boxplot(filter_names=stations_for_rel), use_container_width=True)
+            st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
         else:
             st.info("No stations found for the selected relation(s) via direction_stops.")
 
