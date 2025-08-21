@@ -222,6 +222,17 @@ def load_all_stations(_conn):
             print(f"⚠️ Failed to clean row: {row} — {e}")
 
     return sorted(set(names))  # remove duplicates, sort alphabetically
+@st.cache_data
+def get_all_direction_names():
+    dbc = DBConnector()  # create inside to avoid unhashable args
+    query = """
+    SELECT DISTINCT direction_name
+    FROM direction_stops
+    WHERE direction_name IS NOT NULL
+    ORDER BY direction_name
+    """
+    df = pd.read_sql(query, dbc.conn)
+    return df['direction_name'].dropna().unique().tolist()
 
 
 
@@ -357,7 +368,9 @@ if page == "Dashboard Tab":
 
 elif page == "Analytics Tab":
     with st.expander("📦 Total Delay Boxplots (Relation → Stations → Links)", expanded=True):
-        all_relations = sorted(direction_box.df["name"].dropna().unique())
+        
+        all_relations = get_all_direction_names()
+
         selected_relations = st.multiselect(
             "Select relation direction(s):",
             options=all_relations,
@@ -371,28 +384,11 @@ elif page == "Analytics Tab":
         st.markdown("### 🎯 Total Delay — Selected Relation(s)")
         st.plotly_chart(direction_box.render_boxplot(filter_names=selected_relations), use_container_width=True)
 
-        rel_to_stations, rel_to_links = stations_and_links_from_db(dbc, selected_relations)
-        stations_for_rel = sorted({s for rel in selected_relations for s in rel_to_stations.get(rel, [])})
-        links_for_rel    = sorted({l for rel in selected_relations for l in rel_to_links.get(rel, [])})
-      
-
-
         st.markdown("### 🏢 Total Delay — Stations on Selected Relation(s)")
-        st.write("➡ Rendering Station Boxplot for:", stations_for_rel)
-        if stations_for_rel:
-           st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
-
-
-        else:
-            st.info("No stations found for the selected relation(s) via direction_stops.")
+        st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
 
         st.markdown("### 🔗 Total Delay — Links (Consecutive Stations) on Selected Relation(s)")
-        if links_for_rel:
-            st.plotly_chart(link_box.render_boxplot(filter_names=links_for_rel), use_container_width=True)
-
-        else:
-            st.info("No links found for the selected relation(s) via direction_stops.")
-
+        st.plotly_chart(link_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
 
 
 
