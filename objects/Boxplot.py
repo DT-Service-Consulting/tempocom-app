@@ -40,7 +40,7 @@ class BaseBoxPlotDB:
         data = self.df if data is None else data
         fig = go.Figure()
         if data.empty:
-            fig.update_layout(title=title, xaxis_title="Delay (minutes)")
+            fig.update_layout(title=title, yaxis_title="Delay (minutes)")
             fig.add_annotation(
                 text="No data for current selection", x=0.5, y=0.5,
                 xref="paper", yref="paper", showarrow=False
@@ -52,64 +52,148 @@ class BaseBoxPlotDB:
         all_maxs = []
 
         for _, row in data.iterrows():
-            # Boxplot values
-            x_values = row["outliers"] + [row["Q1"], row["Q3"], row["median"], row["min"], row["max"]]
+            y_values = row["outliers"] + [row["Q1"], row["Q3"], row["median"], row["min"], row["max"]]
             all_mins.append(row["min"])
             all_maxs.append(row["max"])
 
             fig.add_trace(go.Box(
-                x=x_values,
+                y=y_values,
                 name=row["name"],
                 boxpoints="outliers" if row["outliers"] else False,
                 hovertext=f"n={row['n_samples']}",
                 hoverinfo="text",
-                orientation="h"
+                orientation="v"
             ))
+            if all_planned:
+                    fig.add_trace(go.Scatter(
+                        x=[row["name"] for _, row in data.iterrows() if not pd.isna(row.get("planned"))],
+                        y=[row["planned"] for _, row in data.iterrows() if not pd.isna(row.get("planned"))],
+                        mode="markers+text",
+                        marker=dict(
+                            symbol="star-diamond",
+                            size=[max(12, min(30, (row["max"] - row["min"]) // 10)) for _, row in data.iterrows() if not pd.isna(row.get("planned"))],
+                            color="red",
+                            line=dict(color="black", width=2)
+                        ),
+                        text=["Planned"] * len([_ for _, row in data.iterrows() if not pd.isna(row.get("planned"))]),
+                        textposition="top right",
+                        name="Planned",
+                        showlegend=False
+                    ))
 
-            # Add star for planned value
+
             if not pd.isna(row.get("planned")):
                 all_planned.append(row["planned"])
                 fig.add_trace(go.Scatter(
-                    x=[row["planned"]],
-                    y=[row["name"]],
+                    x=[row["name"]],
+                    y=[row["planned"]],
                     mode="markers+text",
                     marker=dict(
                         symbol="star-diamond",
-                        size=20,
+                        size=max(12, min(30, (row["max"] - row["min"]) // 10)),
                         color="red",
                         line=dict(color="black", width=2)
                     ),
                     text=["Planned"],
-                    textposition="middle right",
+                    textposition="top right",
                     name="Planned",
                     showlegend=False
                 ))
 
-        # Extend x-axis to fit planned markers
         if all_planned:
-            min_x = min(all_mins + all_planned)
-            max_x = max(all_maxs + all_planned)
-            fig.update_xaxes(range=[min_x * 0.95, max_x * 1.05])
+            min_y = min(all_mins + all_planned)
+            max_y = max(all_maxs + all_planned)
+            fig.update_yaxes(range=[min_y * 0.95, max_y * 1.05])
 
         fig.update_layout(
             title=title,
-            xaxis_title="Delay (minutes)",
+            yaxis_title="Delay (minutes)",
             boxmode="group"
         )
 
         return fig
 
 
+
 class DelayBoxPlot(BaseBoxPlotDB):
     def __init__(self, db_connector):
         super().__init__(db_connector, plot_type="relation")
 
+    def _create_boxplot(self, title, data=None):
+        data = self.df if data is None else data
+        fig = go.Figure()
+
+        if data.empty:
+            fig.update_layout(title=title, yaxis_title="Delay (minutes)")
+            fig.add_annotation(
+                text="No data for current selection", x=0.5, y=0.5,
+                xref="paper", yref="paper", showarrow=False
+            )
+            return fig
+
+        all_mins = []
+        all_maxs = []
+        all_planned = []
+        categories = data["name"].tolist()
+
+        for _, row in data.iterrows():
+            y_values = row["outliers"] + [row["Q1"], row["Q3"], row["median"], row["min"], row["max"]]
+            all_mins.append(row["min"])
+            all_maxs.append(row["max"])
+
+            fig.add_trace(go.Box(
+                y=y_values,
+                name=row["name"],
+                boxpoints="outliers" if row["outliers"] else False,
+                hovertext=f"n={row['n_samples']}",
+                hoverinfo="text",
+                orientation="v"
+            ))
+
+        # Add dashed line with transparent marker for hover
+        for idx, row in enumerate(data.itertuples()):
+            if not pd.isna(row.planned):
+                all_planned.append(row.planned)
+                fig.add_shape(
+                    type="line",
+                    x0=idx - 0.4, x1=idx + 0.4,
+                    y0=row.planned, y1=row.planned,
+                    xref="x", yref="y",
+                    line=dict(color="red", width=2, dash="dash")
+                )
+                fig.add_trace(go.Scatter(
+                    x=[idx],
+                    y=[row.planned],
+                    mode="markers",
+                    marker=dict(size=8, color="rgba(0,0,0,0)"),
+                    hovertemplate=f"<b>{row.name}</b><br>Planned: {row.planned} min<extra></extra>",
+                    showlegend=False
+                ))
+
+        if all_planned:
+            min_y = min(all_mins + all_planned)
+            max_y = max(all_maxs + all_planned)
+            fig.update_yaxes(range=[min_y * 0.95, max_y * 1.05])
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None],
+                mode='lines',
+                line=dict(color='red', width=2, dash='dash'),
+                name='Planned',
+                hoverinfo="skip"
+            ))
+
+        fig.update_layout(
+            title=title,
+            yaxis_title="Delay (minutes)",
+            boxmode="group",
+            xaxis=dict(showticklabels=False, showgrid=False, zeroline=False)
+        )
+
+        return fig
+
     def render_boxplot(self, filter_names=None):
         data = self._filter_df(filter_names)
         return self._create_boxplot("Total Delay Distribution by Relation", data=data)
-
-
-
 
 def _norm(s: str) -> str:
     if s is None:
@@ -119,14 +203,6 @@ def _norm(s: str) -> str:
 
 
 
-
-class DelayBoxPlot(BaseBoxPlotDB):
-    def __init__(self, db_connector):
-        super().__init__(db_connector, plot_type="relation")
-
-    def render_boxplot(self, filter_names=None):
-        data = self._filter_df(filter_names)
-        return self._create_boxplot("Total Delay Distribution by Relation", data=data)
 
 
 class StationBoxPlot(BaseBoxPlotDB):
