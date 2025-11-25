@@ -26,7 +26,7 @@ def load(): return Coupures(), MacroNetwork()
 coupures, network = load()
 if 'coupures' not in st.session_state: st.session_state.coupures = coupures
 if 'network' not in st.session_state: st.session_state.network = network
-if 'advised_coupures' not in st.session_state: st.session_state.advised_coupures = []
+if 'advised_coupures' not in st.session_state: st.session_state.advised_coupures = pd.DataFrame()
 if 'ctl_section' not in st.session_state: st.session_state.ctl_section = None
 if 'm' not in st.session_state:
     m = folium.Map(location=[50.850346, 4.351721], zoom_start=8, tiles='CartoDB dark_matter')
@@ -53,7 +53,6 @@ with st.form("Keep Free Advisor"):
         st.session_state.ctl_section = ctl_section
         advised_coupures = coupures.advise_keepfrees(ctl_section, network)
         advised_coupures = pd.DataFrame(advised_coupures)
-        advised_coupures = advised_coupures
         layer = coupures.render_coupure_line(advised_coupures[advised_coupures['impact'] == 'CTL'], network, opacity=1, line_weight=3, layer_name='Keep Free Advisor')
         advised_coupures = advised_coupures[advised_coupures['impact'] != 'CTL']
         st.session_state.advised_coupures = advised_coupures
@@ -64,7 +63,7 @@ with mcol1:
     folium_static(m, width=width, height=int(height * ratio))
 
 with mcol2:
-    if 'advised_coupures' in locals():
+    if not advised_coupures.empty:
         with st.form("select_keep_frees"):
             st.subheader("Advised Keep Frees")
             selected_keepfrees = []
@@ -89,12 +88,4 @@ with mcol2:
                 layer = coupures.render_coupure_line(pd.DataFrame(selected_keepfrees), network, opacity=1, line_weight=3, layer_name='Keep Free Advisor')
                 layer.add_to(m)
                 st.rerun()
-
-        
-
-
-
-
-
-
 
