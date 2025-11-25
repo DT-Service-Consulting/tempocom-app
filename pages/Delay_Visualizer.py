@@ -367,28 +367,61 @@ if page == "Dashboard Tab":
 
 
 elif page == "Analytics Tab":
-    with st.expander("📦 Total Delay Boxplots (Relation → Stations → Links)", expanded=True):
-        
-        all_relations = get_all_direction_names()
+    with st.expander("📦 Total Delay Boxplots (Direction → Stations → Links)", expanded=True):
 
-        selected_relations = st.multiselect(
-            "Select relation direction(s):",
-            options=all_relations,
+        all_directions = get_all_direction_names()
+
+        selected_directions = st.multiselect(
+            "Select direction(s):",
+            options=all_directions,
             max_selections=3
         )
 
-        if not selected_relations:
-            st.info("Select at least one relation to see the boxplots.")
+        if not selected_directions:
+            st.info("Select at least one direction to see the boxplots.")
             st.stop()
 
-        st.markdown("### 🎯 Total Delay — Selected Relation(s)")
-        st.plotly_chart(direction_box.render_boxplot(filter_names=selected_relations), use_container_width=True)
+        # --- Helper: fetch exact 'name' values for a given type prefixed by any selected direction
+        def _boxplot_names_for_type_and_directions(conn, row_type, directions):
+            # Build an OR of LIKE clauses: name LIKE ? for each direction (prefix match)
+            like_clauses = " OR ".join(["name LIKE ?"] * len(directions))
+            sql = f"""
+                SELECT DISTINCT name
+                FROM punctuality_boxplots
+                WHERE type = ? AND ({like_clauses})
+            """
+            params = [row_type] + [d + "%" for d in directions]
+            df = pd.read_sql(sql, conn, params=params)
+            return sorted(df["name"].dropna().astype(str).str.strip().tolist())
 
-        st.markdown("### 🏢 Total Delay — Stations on Selected Relation(s)")
-        st.plotly_chart(station_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
+        # 1) Direction boxplot (these rows' names are the directions themselves)
+        st.markdown("### 🎯 Total Delay — Selected Direction(s)")
+        st.plotly_chart(
+            direction_box.render_boxplot(filter_names=selected_directions),
+            use_container_width=True
+        )
 
-        st.markdown("### 🔗 Total Delay — Links (Consecutive Stations) on Selected Relation(s)")
-        st.plotly_chart(link_box.render_boxplot(selected_directions=selected_relations), use_container_width=True)
+        # 2) Station boxplot (names are station-level entries prefixed by the direction string)
+        st.markdown("### 🏢 Total Delay — Stations on Selected Direction(s)")
+        filtered_station_names = _boxplot_names_for_type_and_directions(dbc.conn, "station", selected_directions)
+        if filtered_station_names:
+            st.plotly_chart(
+                station_box.render_boxplot(filter_names=filtered_station_names),
+                use_container_width=True
+            )
+        else:
+            st.info("No station-level data available for selected directions.")
+
+        # 3) Link boxplot (names are link-level entries, also prefixed by the direction string)
+        st.markdown("### 🔗 Total Delay — Links on Selected Direction(s)")
+        filtered_link_names = _boxplot_names_for_type_and_directions(dbc.conn, "link", selected_directions)
+        if filtered_link_names:
+            st.plotly_chart(
+                link_box.render_boxplot(filter_names=filtered_link_names),
+                use_container_width=True
+            )
+        else:
+            st.info("No link-level data available for selected directions.")
 
 
 

@@ -210,29 +210,16 @@ class StationBoxPlot(BaseBoxPlotDB):
     def __init__(self, db_connector):
         super().__init__(db_connector, plot_type='station')
 
-    def get_stations_for_directions(self, directions):
-        if not directions:
-            return []
-
-        direction_list = ",".join(f"'{d}'" for d in directions)
-
-        # ✅ Step 1: Get station names from direction_stops
-        sql = f"""
-            SELECT DISTINCT station_name
-            FROM direction_stops
-            WHERE direction_name IN ({direction_list})
-              AND station_name IS NOT NULL
+    def get_stations_for_directions(conn, selected_directions):
+        placeholders = ','.join(['?'] * len(selected_directions))
+        query = f"""
+            SELECT DISTINCT name AS station_name
+            FROM punctuality_boxplots
+            WHERE type = 'station' AND name IN ({placeholders})
         """
-        direction_df = pd.read_sql(sql, self.dbc.conn)
-
-        # ✅ Step 2: Normalize both sets for safe comparison
-        direction_stations = set(direction_df["station_name"].dropna().str.strip().str.title())
-
-        # ✅ Step 3: Filter self.df by those station names
-        boxplot_stations = self.df["name"].dropna().str.strip().str.title()
-        matched_stations = [s for s in boxplot_stations if s in direction_stations]
-
-        return sorted(set(matched_stations))
+        df = pd.read_sql(query, conn, params=selected_directions)
+        return df["station_name"].dropna().str.strip().str.title().tolist()
+        
 
 
 
