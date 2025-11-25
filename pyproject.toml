@@ -26,6 +26,7 @@ pyspark = "^4.0.0"
 azure-identity = "^1.23.0"
 pyodbc = "^5.2.0"
 streamlit-option-menu = "^0.4.0"
+sqlalchemy = "^2.0.43"
 
 
 [tool.poetry.group.dev.dependencies]
