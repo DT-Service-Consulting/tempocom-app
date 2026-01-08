@@ -3,6 +3,9 @@ name = "tempocom"
 version = "0.1.0"
 description = "Application de gestion de réseau de transport"
 authors = ["Your Name <your.email@example.com>"]
+packages = [
+    { include = "tempocom", from = "src" }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
@@ -27,19 +30,30 @@ azure-identity = "^1.23.0"
 pyodbc = "^5.2.0"
 streamlit-option-menu = "^0.4.0"
 sqlalchemy = "^2.0.43"
+duckdb = "^1.4.1"
+polars = "^1.34.0"
+networkx = "^3.4.2"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 poetry-dotenv-plugin = "^0.2.0"
+pytest-dotenv = "^0.5.2"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+testpaths = ["features"]
+python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+norecursedirs = [".*", "build", "dist", "node_modules", "venv", "__pycache__"]
+env_files = [".env"]
+
+
+[tool.poetry.scripts]
+tempocom = "tempocom.__main__:main"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api" 
+
