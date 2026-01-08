@@ -40,13 +40,13 @@ jobs:
             cd /home/ubuntu/app
       
             {
-              printf "APP_ACCESS_CODE=%s\n" "${{ secrets.APP_ACCESS_CODE }}"
-              printf "STREAMLIT_ENV=production\n"
-              printf "APPS_PASSWORD=%s\n" "${{ secrets.APPS_PASSWORD }}"
-              printf "DB_CONN_PROD=%s\n" "${{ secrets.DB_CONN_PROD }}"
-              printf "ASSETS_PATH=%s\n" "${{ vars.ASSETS_PATH }}"
+              printf 'APP_ACCESS_CODE="%s"\n' "${{ secrets.APP_ACCESS_CODE }}"
+              printf 'STREAMLIT_ENV=production\n'
+              printf 'APPS_PASSWORD="%s"\n' "${{ secrets.APPS_PASSWORD }}"
+              printf 'DB_CONN_PROD="%s"\n' "${{ secrets.DB_CONN_PROD }}"
+              printf 'ASSETS_PATH="%s"\n' "${{ vars.ASSETS_PATH }}"
             } > .env
-            
+      
             chmod 600 .env
           EOF
       
