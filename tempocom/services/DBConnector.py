@@ -1,11 +1,6 @@
 from azure import identity
 import pyodbc, struct, os
-from dotenv import load_dotenv
-from pyspark.sql import DataFrame
-from pyspark.sql.functions import regexp_replace, col
-import pandas as pd
-from pyspark.sql import SparkSession
-import duckdb
+
 import threading
 
 _shared_connector = None
