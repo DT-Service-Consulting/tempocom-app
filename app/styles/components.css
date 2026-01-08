@@ -1,0 +1,209 @@
+.tempocom-header {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  padding: var(--spacing-xl) 0;
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.tempocom-header h1 {
+  color: white;
+  font-size: var(--font-size-3xl);
+  margin-bottom: var(--spacing-sm);
+}
+
+.tempocom-header p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+.tempocom-card {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-light);
+  transition: var(--transition);
+}
+
+.tempocom-card:hover {
+  box-shadow: var(--shadow-medium);
+  transform: translateY(-2px);
+}
+
+.tempocom-card-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.tempocom-card-title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.tempocom-card-content {
+  color: var(--text-secondary);
+}
+
+.tempocom-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: none;
+  border-radius: var(--border-radius);
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+.tempocom-button-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tempocom-button-primary:hover {
+  background-color: var(--secondary-color);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-medium);
+}
+
+.tempocom-button-secondary {
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.tempocom-button-secondary:hover {
+  background-color: var(--border-color);
+}
+
+.tempocom-button-outline {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 2px solid var(--primary-color);
+}
+
+.tempocom-button-outline:hover {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tempocom-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tempocom-badge-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tempocom-badge-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+.tempocom-badge-accent {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.tempocom-alert {
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius);
+  border-left: 4px solid;
+  margin-bottom: var(--spacing-md);
+}
+
+.tempocom-alert-info {
+  background-color: rgba(37, 99, 235, 0.1);
+  border-left-color: #2563eb;
+  color: #1e40af;
+}
+
+.tempocom-alert-success {
+  background-color: rgba(34, 197, 94, 0.1);
+  border-left-color: #22c55e;
+  color: #15803d;
+}
+
+.tempocom-alert-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-left-color: #f59e0b;
+  color: #d97706;
+}
+
+.tempocom-alert-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left-color: #ef4444;
+  color: #dc2626;
+}
+
+.tempocom-grid {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.tempocom-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.tempocom-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.tempocom-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 768px) {
+  .tempocom-grid-2,
+  .tempocom-grid-3,
+  .tempocom-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tempocom-flex {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.tempocom-flex-center {
+  align-items: center;
+  justify-content: center;
+}
+
+.tempocom-flex-between {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tempocom-flex-wrap {
+  flex-wrap: wrap;
+}
+
+.tempocom-spacer {
+  height: var(--spacing-md);
+}
+
+.tempocom-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: var(--spacing-lg) 0;
+}
