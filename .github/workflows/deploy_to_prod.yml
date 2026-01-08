@@ -48,8 +48,8 @@ jobs:
             
             chmod 600 .env
           EOF
-
-      - name: Recreate venv and install dependencies
+      
+      - name: Install dependencies with Poetry (force .venv)
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@tempocom.dtsc.be << 'EOF'
             set -e
@@ -58,9 +58,14 @@ jobs:
             export POETRY_HTTP_TIMEOUT=120
             export POETRY_HTTP_RETRIES=5
       
-            python3 -m venv venv
-            source venv/bin/activate
-            poetry install --no-interaction --no-root --sync
+            # Nettoyage défensif
+            rm -rf venv .venv
+      
+            # Forcer Poetry à créer .venv dans le projet
+            poetry config virtualenvs.in-project true
+      
+            # Installer les dépendances
+            poetry install --no-interaction --sync
           EOF
 
       - name: Restart systemd Streamlit service
