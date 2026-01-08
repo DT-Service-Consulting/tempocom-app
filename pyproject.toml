@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Application de gestion de réseau de transport"
 authors = ["Your Name <your.email@example.com>"]
 packages = [
-    { include = "tempocom", from = "src" }
+    { include = "tempocom"}
 ]
 
 [tool.poetry.dependencies]
