@@ -49,10 +49,13 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@tempocom.dtsc.be << 'EOF'
             set -e
             cd /home/ubuntu/app
-
+      
+            export POETRY_HTTP_TIMEOUT=120
+            export POETRY_HTTP_RETRIES=5
+      
             python3 -m venv venv
             source venv/bin/activate
-            poetry install --no-interaction --no-root
+            poetry install --no-interaction --no-root --sync
           EOF
 
       - name: Restart systemd Streamlit service
