@@ -33,22 +33,7 @@ jobs:
             -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             ./ ubuntu@tempocom.dtsc.be:/home/ubuntu/app/
 
-      - name: Create .env file on server
-        run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@tempocom.dtsc.be << 'EOF'
-            set -e
-            cd /home/ubuntu/app
-      
-            {
-              printf 'APP_ACCESS_CODE="%s"\n' "${{ secrets.APP_ACCESS_CODE }}"
-              printf 'STREAMLIT_ENV=production\n'
-              printf 'APPS_PASSWORD="%s"\n' "${{ secrets.APPS_PASSWORD }}"
-              printf 'DB_CONN_PROD="%s"\n' "${{ secrets.DB_CONN_PROD }}"
-              printf 'ASSETS_PATH="%s"\n' "${{ vars.ASSETS_PATH }}"
-            } > .env
-      
-            chmod 600 .env
-          EOF
+            
       
       - name: Install dependencies with Poetry (force .venv)
         run: |
