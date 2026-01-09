@@ -21,7 +21,8 @@ class Page:
     layout = "wide"
     theme = "light"
     private = False
-
+    dbc = DBConnector()
+    
     def __init__(self):
         # Configure la page
         st.set_page_config(page_title=self.title, page_icon=self.icon, layout=self.layout)
