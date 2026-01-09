@@ -9,9 +9,7 @@ class Sandbox(Page):
     title = "Sandbox"
     layout = "wide"
 
-    @st.cache_resource
-    def _get_db_connector(_self):
-        return DBConnector()
+
     
     @st.cache_resource
     def _get_macro_network(_self, _dbc):
@@ -29,8 +27,7 @@ class Sandbox(Page):
             # │                    Macro Network Editor                     │
             # └─────────────────────────────────────────────────────────────┘
 
-            dbc = self._get_db_connector()
-            network = self._get_macro_network(dbc)
+            network = self._get_macro_network(self.dbc)
 
             with st.form(key='shortest_path_form'):
                 col1, col2 = st.columns(2)
