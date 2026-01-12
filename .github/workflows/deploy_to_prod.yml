@@ -12,8 +12,9 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy to Server
     runs-on: ubuntu-latest
+    environment: env
 
     steps:
       - name: Checkout code
@@ -21,26 +22,42 @@ jobs:
 
       - name: Set up SSH key
         run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          echo "${{ secrets.SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Sync code to EC2
+      - name: Sync code to server
         run: |
-          rsync -az --delete -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./ ${{ secrets.EC2_HOST }}:/home/ubuntu/app/
+          rsync -az --delete \
+            --exclude .env \
+            --exclude .venv \
+            -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
+            ./ ubuntu@tempocom.dtsc.be:/home/ubuntu/app/
 
-      - name: Recreate venv and install dependencies (on EC2)
+            
+      
+      - name: Install dependencies with Poetry (force .venv)
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_HOST }} "
-            cd /home/ubuntu/app &&
-            python3 -m venv venv &&
-            source venv/bin/activate &&
-            poetry install --no-interaction
-          "
+          ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@tempocom.dtsc.be << 'EOF'
+            set -e
+            cd /home/ubuntu/app
+      
+            export POETRY_HTTP_TIMEOUT=120
+            export POETRY_HTTP_RETRIES=5
+      
+            # Nettoyage défensif
+            rm -rf venv .venv
+      
+            # Forcer Poetry à créer .venv dans le projet
+            poetry config virtualenvs.in-project true
+      
+            # Installer les dépendances
+            poetry install --no-interaction --sync
+          EOF
 
       - name: Restart systemd Streamlit service
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_HOST }} "
-            sudo systemctl daemon-reload &&
-            sudo systemctl restart streamlit-tempocom.service &&
+          ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@tempocom.dtsc.be << 'EOF'
+            sudo systemctl daemon-reload
+            sudo systemctl restart streamlit-tempocom.service
             sudo systemctl status streamlit-tempocom.service --no-pager
-          "
+          EOF

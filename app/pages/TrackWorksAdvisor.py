@@ -10,10 +10,6 @@ from datetime import datetime
 
 class TrackWorksAdvisor(Page):
     private = True
-
-    @st.cache_resource
-    def _get_db_connector(_self):
-        return DBConnector()
     
     @st.cache_resource
     def _get_macro_network(_self, _dbc):
@@ -35,9 +31,9 @@ class TrackWorksAdvisor(Page):
             # │                    Current Track Works                      │
             # └─────────────────────────────────────────────────────────────┘
 
-            dbc = self._get_db_connector()
-            macro_network = self._get_macro_network(dbc)
-            track_works_controller = self._get_track_works_controller(dbc, macro_network)
+
+            macro_network = self._get_macro_network(self.dbc)
+            track_works_controller = self._get_track_works_controller(self.dbc, macro_network)
 
             min_date, max_date = track_works_controller.get_date_range()
             
@@ -68,8 +64,8 @@ class TrackWorksAdvisor(Page):
                 
                 selected_datetime = datetime.combine(selected_date, datetime.min.time())
                 
-                track_works_controller_filtered = TrackWorksController(dbc, macro_network.macro_links)
-                track_works_controller_filtered.track_works = TrackWorks(dbc, selected_datetime)
+                track_works_controller_filtered = TrackWorksController(self.dbc, macro_network.macro_links)
+                track_works_controller_filtered.track_works = TrackWorks(self.dbc, selected_datetime)
             else:
                 st.warning("No track works data available")
                 return

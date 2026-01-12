@@ -19,10 +19,6 @@ class Home(Page):
     title = "Home"
     layout = "wide"
 
-
-    @st.cache_resource
-    def _get_db_connector(_self):
-        return DBConnector()
     
     @st.cache_resource
     def _get_macro_network(_self, _dbc):
@@ -39,9 +35,8 @@ class Home(Page):
             st.session_state.snow = True
         
         
-        dbc = self._get_db_connector()
-        macro_network = self._get_macro_network(dbc)
-        track_works_controller = self._get_track_works_controller(dbc, macro_network)
+        macro_network = self._get_macro_network(self.dbc)
+        track_works_controller = self._get_track_works_controller(self.dbc, macro_network)
         map_col, control_col = st.columns([5, 5])
 
         with control_col:
