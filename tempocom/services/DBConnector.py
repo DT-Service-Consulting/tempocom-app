@@ -1,5 +1,6 @@
 from azure import identity
 import pyodbc, struct, os
+pyodbc.pooling = False
 
 import threading
 
