@@ -18,7 +18,7 @@ class MacroLinks:
     """
     
     def __init__(self,dbc:DBConnector,lang = "EN"):
-        self.df = pd.DataFrame(dbc.query(self.sql_query))
+        self.df = pd.DataFrame(self.sql_query, dbc.conn)
         self.df['DISABLED'] = False
         self.df['GEO_SHAPE'] = self.df['GEO_SHAPE'].apply(ast.literal_eval)
         self.operational_points = OperationalPoints(dbc, lang)
