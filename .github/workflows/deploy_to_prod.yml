@@ -44,8 +44,8 @@ jobs:
             export POETRY_HTTP_TIMEOUT=120
             export POETRY_HTTP_RETRIES=5
       
-            # Nettoyage défensif
-            rm -rf venv .venv
+            # Nettoyage défensif avec force
+            sudo rm -rf venv .venv
       
             # Forcer Poetry à créer .venv dans le projet
             poetry config virtualenvs.in-project true
