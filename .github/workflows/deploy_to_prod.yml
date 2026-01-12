@@ -45,7 +45,7 @@ jobs:
             export POETRY_HTTP_RETRIES=5
       
             # Nettoyage défensif
-            rm -rf venv .venv
+            sudo rm -rf venv .venv
       
             # Forcer Poetry à créer .venv dans le projet
             poetry config virtualenvs.in-project true
