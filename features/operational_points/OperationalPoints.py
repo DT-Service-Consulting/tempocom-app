@@ -18,13 +18,15 @@ class OperationalPoints:
         FROM operational_points
         """
 
-    def __init__(self, dbc:DBConnector, lang = "EN"):
-        self.df = pd.DataFrame(dbc.query(self.sql_query))
+    def load(self, lang = "EN"):
+        dbc = DBConnector()
+        self.df = pd.read_sql(self.sql_query, dbc.connect())
         self.df['NAME'] = self.df.apply(
             lambda row: row['NAME'] if row['NAME'] == row['NAME_NL'] else f"{row['NAME']} / {row['NAME_NL']}", 
             axis=1
         )
         self.df['GEO_POINT'] = self.df['GEO_POINT'].apply(lambda x: tuple(map(float, ast.literal_eval(x))))
+        return self
 
     def get_point_by_id(self,PTCAR_ID):
         point = self.df[self.df['ID'] == PTCAR_ID]

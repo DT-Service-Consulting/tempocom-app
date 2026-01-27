@@ -8,17 +8,18 @@ class TrackWorks:
     WHERE status = 'Y'
     """
     
-    def __init__(self, dbc: DBConnector, date: Optional[datetime] = None):
-        self.dbc = dbc
+    def load(self, date: Optional[datetime] = None):
+        self.dbc = DBConnector()
         if date is None:
             date = datetime.now()
         self.sql_query = self.sql_query + f" AND date_begin <= '{date}' AND date_end >= '{date}'"
-        self.df = pd.DataFrame(self.dbc.query(self.sql_query))
+        self.df = pd.read_sql(self.sql_query, self.dbc.connect())
         self.date_range = self.get_date_range()
+        return self
     
     def get_date_range(self):
         query = "SELECT MIN(date_begin) as min_date, MAX(date_begin) as max_date FROM colt WHERE status = 'Y'"
-        result = pd.DataFrame(self.dbc.query(query))
+        result = pd.read_sql(query, self.dbc.connect())
         if result.empty:
             return None, None
         return pd.to_datetime(result.iloc[0]['min_date']).date(), pd.to_datetime(result.iloc[0]['max_date']).date()
@@ -39,10 +40,10 @@ class TrackWorks:
         return row['section_from_id'] == row['section_to_id']
 
     def get_description(self, id):
-        res = pd.DataFrame(self.dbc.query(f"SELECT description_of_works FROM colt_descriptions WHERE cou_id = {id}"))
+        res = pd.read_sql(f"SELECT description_of_works FROM colt_descriptions WHERE cou_id = {id}", self.dbc.connect())
         return "No description available" if res.empty else res.iloc[0]['description_of_works']
 
     def get_descriptions(self, ids: list[int]):
-        res = pd.DataFrame(self.dbc.query(f"SELECT cou_id, description_of_works FROM colt_descriptions WHERE cou_id IN ({','.join(map(str, ids))})"))
+        res = pd.read_sql(f"SELECT cou_id, description_of_works FROM colt_descriptions WHERE cou_id IN ({','.join(map(str, ids))})", self.dbc.connect())
         return dict(zip(res['cou_id'], res['description_of_works']))
 

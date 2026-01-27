@@ -21,12 +21,12 @@ class Home(Page):
 
     
     @st.cache_resource
-    def _get_macro_network(_self, _dbc):
-        return MacroNetwork(_dbc)
+    def _get_macro_network(_self) -> MacroNetwork:
+        return MacroNetwork()
     
     @st.cache_resource
-    def _get_track_works_controller(_self, _dbc, _macro_network) -> TrackWorksController:
-        return TrackWorksController(_dbc, _macro_network)
+    def _get_track_works_controller(_self) -> TrackWorksController:
+        return TrackWorksController()
     
     
     def render(self):
@@ -35,8 +35,7 @@ class Home(Page):
             st.session_state.snow = True
         
         
-        macro_network = self._get_macro_network(self.dbc)
-        track_works_controller = self._get_track_works_controller(self.dbc, macro_network)
+        macro_network = self._get_macro_network()
         map_col, control_col = st.columns([5, 5])
 
         with control_col:

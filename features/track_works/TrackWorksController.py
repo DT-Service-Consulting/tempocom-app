@@ -5,17 +5,14 @@ from datetime import datetime
 from features.macro_network.MacroLinks import MacroLinks
 from typing import List
 from folium.map import FeatureGroup
-from tempocom.services import DBConnector
 
 class TrackWorksController:
     
-    def __init__(self, dbc: DBConnector, macro_network: MacroLinks):
-
-        self.dbc = dbc
+    def __init__(self):
         # models
-        self.track_works = TrackWorks(dbc)
-        self.macro_links = MacroLinks(dbc)
-        self.operational_points = OperationalPoints(dbc)
+        self.track_works = TrackWorks().load()
+        self.macro_links = MacroLinks().load()
+        self.operational_points = OperationalPoints().load()
         # views
         self.track_works_view = TrackWorksView()
         # operations
@@ -24,7 +21,7 @@ class TrackWorksController:
     def get_track_works_layers(self, date=None) -> List[FeatureGroup]:
         if date is None:
             date = datetime.now()
-        track_works = TrackWorks(self.dbc, date)
+        track_works = TrackWorks().load(date)
         layer = self.track_works_view.get_track_works_layer(
             track_works,
             self.operational_points,

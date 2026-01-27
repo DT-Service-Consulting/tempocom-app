@@ -17,11 +17,13 @@ class MacroLinks:
     FROM macro_network
     """
     
-    def __init__(self,dbc:DBConnector,lang = "EN"):
-        self.df = pd.DataFrame(self.sql_query, dbc.conn)
+    def load(self,lang = "EN"):
+        self.dbc = DBConnector()
+        self.df = pd.read_sql(self.sql_query, self.dbc.connect())
         self.df['DISABLED'] = False
         self.df['GEO_SHAPE'] = self.df['GEO_SHAPE'].apply(ast.literal_eval)
-        self.operational_points = OperationalPoints(dbc, lang)
+        self.operational_points = OperationalPoints().load(lang)
+        return self
     
     def update_operational_points_with_links_info(self, operational_points:OperationalPoints):
         # Get all macro station IDs

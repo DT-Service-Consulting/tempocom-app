@@ -2,13 +2,16 @@ import pandas as pd
 from tempocom.services import DBConnector
 
 class Boxplots:
-    def __init__(self, dbc:DBConnector):
+
+    def load(self):
+        self.dbc = DBConnector()
         sql_query = """
             SELECT Q1 as q1, Q3 as q3, max, median, min, n_samples, name, outliers, type, planned
             FROM punctuality_boxplots
         """
-        self.dbc = dbc
-        self.df = pd.DataFrame(dbc.query(sql_query))
+
+        self.df = pd.read_sql(sql_query, self.dbc.connect())
+        return self
         
     def get_unique_relations(self):
         sql_query = """

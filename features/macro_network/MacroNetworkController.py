@@ -6,14 +6,12 @@ from features.macro_network.MacroNetworkView import MacroNetworkView
 from typing import List
 from folium.map import FeatureGroup
 
-from tempocom.services import DBConnector  
-
 class MacroNetwork:
     
-    def __init__(self, dbc:DBConnector, lang = "EN"):
+    def __init__(self, lang = "EN"):
         # models
-        self.operational_points = OperationalPoints(dbc, lang)
-        self.macro_links = MacroLinks(dbc, lang)
+        self.operational_points = OperationalPoints().load(lang)
+        self.macro_links = MacroLinks().load(lang)
 
         # views
         self.operational_points_view = OperationalPointsView()

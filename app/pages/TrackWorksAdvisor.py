@@ -1,7 +1,6 @@
 import streamlit as st
 from tempocom.modules.streamlit import Page
 from streamlit_option_menu import option_menu
-from tempocom.services import DBConnector
 from features.macro_network.MacroNetworkController import MacroNetwork
 from features.track_works.TrackWorksController import TrackWorksController
 from features.track_works.TrackWorks import TrackWorks
@@ -12,12 +11,12 @@ class TrackWorksAdvisor(Page):
     private = True
     
     @st.cache_resource
-    def _get_macro_network(_self, _dbc):
-        return MacroNetwork(_dbc)
+    def _get_macro_network(_self) -> MacroNetwork:
+        return MacroNetwork()
     
     @st.cache_resource
-    def _get_track_works_controller(_self, _dbc, _macro_network) -> TrackWorksController:
-        return TrackWorksController(_dbc, _macro_network.macro_links)
+    def _get_track_works_controller(_self) -> TrackWorksController:
+        return TrackWorksController()
 
     def render(self):
         menu = option_menu(None,
@@ -32,8 +31,8 @@ class TrackWorksAdvisor(Page):
             # └─────────────────────────────────────────────────────────────┘
 
 
-            macro_network = self._get_macro_network(self.dbc)
-            track_works_controller = self._get_track_works_controller(self.dbc, macro_network)
+            macro_network = self._get_macro_network()
+            track_works_controller = self._get_track_works_controller()
 
             min_date, max_date = track_works_controller.get_date_range()
             
@@ -64,8 +63,8 @@ class TrackWorksAdvisor(Page):
                 
                 selected_datetime = datetime.combine(selected_date, datetime.min.time())
                 
-                track_works_controller_filtered = TrackWorksController(self.dbc, macro_network.macro_links)
-                track_works_controller_filtered.track_works = TrackWorks(self.dbc, selected_datetime)
+                track_works_controller_filtered = TrackWorksController()
+                track_works_controller_filtered.track_works = TrackWorks().load(selected_datetime)
             else:
                 st.warning("No track works data available")
                 return

@@ -12,8 +12,8 @@ class Sandbox(Page):
 
     
     @st.cache_resource
-    def _get_macro_network(_self, _dbc):
-        return MacroNetwork(_dbc)
+    def _get_macro_network(_self) -> MacroNetwork:
+        return MacroNetwork()
 
     def render(self):
         menu = option_menu(None,
@@ -27,7 +27,7 @@ class Sandbox(Page):
             # │                    Macro Network Editor                     │
             # └─────────────────────────────────────────────────────────────┘
 
-            network = self._get_macro_network(self.dbc)
+            network = self._get_macro_network()
 
             with st.form(key='shortest_path_form'):
                 col1, col2 = st.columns(2)

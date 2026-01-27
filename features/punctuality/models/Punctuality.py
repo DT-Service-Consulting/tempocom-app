@@ -4,11 +4,12 @@ import datetime
 
 class Punctuality:
 
-    def __init__(self, dbc:DBConnector=DBConnector()):
+    def load(self):
+        self.dbc = DBConnector()
         self.df = pd.DataFrame()
 
-    def filter_by_datetime(self, _from: datetime.datetime, _to: datetime.datetime, dbc:DBConnector=DBConnector()):
-        self.df = pd.DataFrame(dbc.query(f"""
+    def filter_by_datetime(self, _from: datetime.datetime, _to: datetime.datetime):
+        self.df = pd.read_sql(f"""
             SELECT *
             FROM punctuality_public
             WHERE 
@@ -21,7 +22,7 @@ class Punctuality:
                         REAL_DATE_DEP = '{_from.strftime('%Y-%m-%d')}'
                 )
                 AND REAL_DATE_DEP = '{_from.strftime('%Y-%m-%d')}'
-        """))
+        """, self.dbc.connect())
         self.df = self.apply_types()
         return self.df
 

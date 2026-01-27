@@ -3,9 +3,8 @@ from tempocom.services import DBConnector
 from features.punctuality.PunctualityView import PunctualityView
 
 class PunctualityController:
-    def __init__(self, dbc:DBConnector):
-        self.dbc = dbc
-        self.boxplots = Boxplots(self.dbc)
+    def __init__(self):
+        self.boxplots = Boxplots().load()
         self.punctuality_view = PunctualityView()
 
     def get_unique_relations(self):
